@@ -1,0 +1,19 @@
+<functions>
+    <function>
+        <type>executable</type>
+        <name>clickos_syscall</name>
+        <lifetime>0</lifetime>
+        <pool_size>1</pool_size>
+        <return_type>Array(UInt8)</return_type>
+        <argument>
+            <type>UInt32</type>
+            <name>syscall_n</name>
+        </argument>
+        <argument>
+            <type>Array(UInt8)</type>
+            <name>bytes</name>
+        </argument>
+        <format>TabSeparated</format>
+        <command>clickos_client</command>
+    </function>
+</functions>
