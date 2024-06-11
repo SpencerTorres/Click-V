@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	cdb "clickhouse.com/clickv/db"
+	cdb "clickhouse.com/clickv/internal/db"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 )
 

@@ -2,7 +2,7 @@
 #![no_main]
 
 use core::arch::global_asm;
-use crate::syscall::{Syscall, syscall2};
+use crate::syscall::{Syscall};
 use crate::system::{close, open, print, read, write_u8_slice, write_ptr, socket};
 
 mod screen;
