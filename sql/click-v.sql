@@ -68,7 +68,7 @@ CREATE FUNCTION IF NOT EXISTS getins_u_imm AS (ins) -> sign_extend(bitShiftRight
 DROP FUNCTION IF EXISTS getins_branch_imm;
 CREATE FUNCTION IF NOT EXISTS getins_branch_imm AS (ins) -> if(bitShiftRight(bitShiftLeft(bitAnd(toInt32(getins_r_funct7(ins)), 0b01000000), 6), 12) != 0, bitOr(bitOr(bitOr(bitOr(bitOr(bitShiftLeft(bitAnd(toInt32(getins_r_funct7(ins)), 0b01000000), 6), bitShiftLeft(bitAnd(toInt32(getins_rd(ins)), 0b00000001), 11)), bitShiftLeft(bitAnd(toInt32(getins_r_funct7(ins)), 0b00111111), 5)), bitAnd(toInt32(getins_rd(ins)), 0b00011110)), 0), 0xffffe000), bitOr(bitOr(bitOr(bitOr(bitShiftLeft(bitAnd(toInt32(getins_r_funct7(ins)), 0b01000000), 6), bitShiftLeft(bitAnd(toInt32(getins_rd(ins)), 0b00000001), 11)), bitShiftLeft(bitAnd(toInt32(getins_r_funct7(ins)), 0b00111111), 5)), bitAnd(toInt32(getins_rd(ins)), 0b00011110)), 0));
 DROP FUNCTION IF EXISTS getins_jal_imm;
-CREATE FUNCTION IF NOT EXISTS getins_jal_imm AS (ins) -> if(bitShiftRight(bitShiftRight(bitAnd(toInt32(ins), toInt32(0x80000000)), 11), 20) != 0, bitOr(bitOr(bitOr(bitOr(bitOr(bitShiftRight(bitAnd(toInt32(ins), toInt32(0x80000000)), 11), bitAnd(toInt32(ins), toInt32(0b00000000000011111111000000000000))), bitShiftRight(bitAnd(toInt32(ins), toInt32(0b00000000000100000000000000000000)), 9)), bitShiftRight(bitAnd(toInt32(ins), toInt32(0b01111111111000000000000000000000)), 20)), toInt32(0)), toInt32(0xfff00000)), bitOr(bitOr(bitOr(bitOr(bitShiftRight(bitAnd(toInt32(ins), toInt32(0x80000000)), 11), bitAnd(toInt32(ins), toInt32(0b00000000000011111111000000000000))), bitShiftRight(bitAnd(toInt32(ins), toInt32(0b00000000000100000000000000000000)), 9)), bitShiftRight(bitAnd(toInt32(ins), toInt32(0b01111111111000000000000000000000)), 20)), toInt32(0)))
+CREATE FUNCTION IF NOT EXISTS getins_jal_imm AS (ins) -> if(bitShiftRight(bitShiftRight(bitAnd(toInt32(ins), toInt32(0x80000000)), 11), 20) != 0, bitOr(bitOr(bitOr(bitOr(bitOr(bitShiftRight(bitAnd(toInt32(ins), toInt32(0x80000000)), 11), bitAnd(toInt32(ins), toInt32(0b00000000000011111111000000000000))), bitShiftRight(bitAnd(toInt32(ins), toInt32(0b00000000000100000000000000000000)), 9)), bitShiftRight(bitAnd(toInt32(ins), toInt32(0b01111111111000000000000000000000)), 20)), toInt32(0)), toInt32(0xfff00000)), bitOr(bitOr(bitOr(bitOr(bitShiftRight(bitAnd(toInt32(ins), toInt32(0x80000000)), 11), bitAnd(toInt32(ins), toInt32(0b00000000000011111111000000000000))), bitShiftRight(bitAnd(toInt32(ins), toInt32(0b00000000000100000000000000000000)), 9)), bitShiftRight(bitAnd(toInt32(ins), toInt32(0b01111111111000000000000000000000)), 20)), toInt32(0)));
 
 DROP FUNCTION IF EXISTS uint32_to_byte_array;
 CREATE FUNCTION IF NOT EXISTS uint32_to_byte_array AS (value) -> ([toUInt8(value), toUInt8(bitShiftRight(value, 8)), toUInt8(bitShiftRight(value, 16)), toUInt8(bitShiftRight(value, 24))]);
@@ -231,7 +231,7 @@ INSERT INTO clickv.pc (value) VALUES (0); -- initialize to 0
 
 -- Redis In-Memory Registers
 CREATE TABLE IF NOT EXISTS clickv.registers (address UInt8, value UInt32)
-ENGINE = Redis('host.docker.internal:6379')
+ENGINE = Redis('localhost:6379')
 PRIMARY KEY (address);
 TRUNCATE TABLE clickv.registers SYNC;
 
@@ -251,7 +251,7 @@ CREATE VIEW IF NOT EXISTS clickv.display_registers AS SELECT address, get_regist
 
 -- Redis In-Memory RAM
 CREATE TABLE IF NOT EXISTS clickv.memory (address UInt32, value UInt8)
-ENGINE = Redis('host.docker.internal:6379', 1)
+ENGINE = Redis('localhost:6379', 1)
 PRIMARY KEY (address);
 TRUNCATE TABLE clickv.memory SYNC;
 
@@ -352,7 +352,7 @@ CREATE LIVE VIEW clickv.display_frame AS SELECT d FROM clickv.frame WHERE t > (n
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 -- Materialized view for next instruction
-CREATE TABLE IF NOT EXISTS clickv.next_instruction (pc UInt32, instruction UInt32, opcode UInt8, funct3 UInt8) ENGINE = Null;
+CREATE TABLE IF NOT EXISTS clickv.next_instruction (pc UInt32, instruction UInt32, opcode UInt8, funct3 UInt8, ins_bytes Array(UInt32)) ENGINE = Null;
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.get_next_instruction
 TO clickv.next_instruction
 AS
@@ -417,7 +417,7 @@ WHERE opcode = 0b01101111 OR opcode = 0b01100111;
 CREATE TABLE IF NOT EXISTS clickv.next_instruction_of_system_type (pc UInt32, instruction UInt32) ENGINE = Null;
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.get_next_instruction_of_system_type
 TO clickv.next_instruction_of_system_type
-AS SELECT pc, instruction, funct3 FROM clickv.next_instruction
+AS SELECT pc, instruction FROM clickv.next_instruction
 WHERE opcode = 0b01110011 AND funct3 = 0x0;
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -432,13 +432,13 @@ WHERE opcode = 0b01110011 AND funct3 = 0x0;
 -- "add" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_add_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_add_filter TO clickv.ins_add_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
 WHERE funct3 = 0x0 AND getins_r_funct7(instruction) = 0x00;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_add_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_add
 TO clickv.registers
@@ -459,13 +459,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_add_incr_pc TO clickv.pc AS SE
 -- "sub" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_sub_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sub_filter TO clickv.ins_sub_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
 WHERE funct3 = 0x0 AND getins_r_funct7(instruction) = 0x20;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_sub_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sub
 TO clickv.registers
@@ -485,13 +485,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sub_incr_pc TO clickv.pc AS SE
 -- "xor" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_xor_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_xor_filter TO clickv.ins_xor_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
 WHERE funct3 = 0x4 AND getins_r_funct7(instruction) = 0x00;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_xor_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_xor
 TO clickv.registers
@@ -511,13 +511,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_xor_incr_pc TO clickv.pc AS SE
 -- "or" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_or_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_or_filter TO clickv.ins_or_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
 WHERE funct3 = 0x6 AND getins_r_funct7(instruction) = 0x00;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_or_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_or
 TO clickv.registers
@@ -537,13 +537,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_or_incr_pc TO clickv.pc AS SEL
 -- "and" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_and_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_and_filter TO clickv.ins_and_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
 WHERE funct3 = 0x7 AND getins_r_funct7(instruction) = 0x00;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_and_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_and
 TO clickv.registers
@@ -563,13 +563,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_and_incr_pc TO clickv.pc AS SE
 -- "sll" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_sll_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sll_filter TO clickv.ins_sll_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
 WHERE funct3 = 0x1 AND getins_r_funct7(instruction) = 0x00;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_sll_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sll
 TO clickv.registers
@@ -589,13 +589,14 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sll_incr_pc TO clickv.pc AS SE
 -- "srl" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_srl_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_srl_filter TO clickv.ins_srl_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
 WHERE funct3 = 0x5 AND getins_r_funct7(instruction) = 0x00;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_srl_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_srl
 TO clickv.registers
@@ -615,21 +616,22 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_srl_incr_pc TO clickv.pc AS SE
 -- "sra" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_sra_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sra_filter TO clickv.ins_sra_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
 WHERE funct3 = 0x5 AND getins_r_funct7(instruction) = 0x20;
 
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_sra_null (pc UInt32, instruction UInt32) ENGINE = Null;
-
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sra
 TO clickv.registers
 AS
+WITH
+	bitAnd(rs2.value, 0x1F) AS shift_by,
+	bitAnd(bitShiftRight(rs1.value, 31), 1) AS msb
 SELECT
 	getins_rd(instruction) AS address,
-	bitAnd(rs2.value, 0x1F) AS shift_by,
-	bitAnd(bitShiftRight(rs1.value, 31), 1) AS msb,
 	if(shift_by = 0, rs1.value, bitOr(bitShiftRight(rs1.value, shift_by), bitShiftLeft(msb, 32 - shift_by)) ) AS value
 FROM clickv.ins_sra_null
 JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
@@ -643,13 +645,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sra_incr_pc TO clickv.pc AS SE
 -- "slt" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_slt_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_slt_filter TO clickv.ins_slt_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
 WHERE funct3 = 0x2 AND getins_r_funct7(instruction) = 0x0;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_slt_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_slt
 TO clickv.registers
@@ -669,13 +671,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_slt_incr_pc TO clickv.pc AS SE
 -- "sltu" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_sltu_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sltu_filter TO clickv.ins_sltu_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
 WHERE funct3 = 0x3 AND getins_r_funct7(instruction) = 0x0;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_sltu_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sltu
 TO clickv.registers
@@ -695,13 +697,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sltu_incr_pc TO clickv.pc AS S
 -- "addi" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_addi_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_addi_filter TO clickv.ins_addi_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_i_type_bit
 WHERE funct3 = 0x0;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_addi_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_addi
 TO clickv.registers
@@ -710,7 +712,7 @@ SELECT
 	getins_rd(instruction) AS address,
 	rs1.value + getins_i_imm(instruction) AS value
 FROM clickv.ins_addi_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
+JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
 WHERE address != 0;
 
 -- increment PC
@@ -720,13 +722,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_addi_incr_pc TO clickv.pc AS S
 -- "xori" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_xori_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_xori_filter TO clickv.ins_xori_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_i_type_bit
 WHERE funct3 = 0x4;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_xori_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_xori
 TO clickv.registers
@@ -745,13 +747,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_xori_incr_pc TO clickv.pc AS S
 -- "ori" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_ori_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ori_filter TO clickv.ins_ori_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_i_type_bit
 WHERE funct3 = 0x6;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_ori_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ori
 TO clickv.registers
@@ -770,13 +772,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ori_incr_pc TO clickv.pc AS SE
 -- "andi" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_andi_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_andi_filter TO clickv.ins_andi_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_i_type_bit
 WHERE funct3 = 0x7;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_andi_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_andi
 TO clickv.registers
@@ -795,13 +797,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_andi_incr_pc TO clickv.pc AS S
 -- "slli" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_slli_null (pc UInt32, instruction UInt32, imm UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_slli_filter TO clickv.ins_slli_null
 AS SELECT pc, instruction, getins_i_imm(instruction) AS imm FROM clickv.next_instruction_of_i_type_bit
 WHERE funct3 = 0x1 AND getins_i_imm_upper(imm) = 0x0;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_slli_null (pc UInt32, instruction UInt32, imm UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_slli
 TO clickv.registers
@@ -820,13 +822,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_slli_incr_pc TO clickv.pc AS S
 -- "srli" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_srli_null (pc UInt32, instruction UInt32, imm UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_srli_filter TO clickv.ins_srli_null
 AS SELECT pc, instruction, getins_i_imm(instruction) AS imm FROM clickv.next_instruction_of_i_type_bit
 WHERE funct3 = 0x5 AND getins_i_imm_upper(imm) = 0x0;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_srli_null (pc UInt32, instruction UInt32, imm UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_srli
 TO clickv.registers
@@ -845,21 +847,22 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_srli_incr_pc TO clickv.pc AS S
 -- "srai" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_srai_null (pc UInt32, instruction UInt32, imm UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_srai_filter TO clickv.ins_srai_null
 AS SELECT pc, instruction, getins_i_imm(instruction) AS imm FROM clickv.next_instruction_of_i_type_bit
 WHERE funct3 = 0x5 AND getins_i_imm_upper(imm) = 0x20;
 
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_srai_null (pc UInt32, instruction UInt32, imm UInt32) ENGINE = Null;
-
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_srai
 TO clickv.registers
 AS
+WITH
+	toUInt32(getins_i_imm_lower(imm)) AS shift_by,
+	bitAnd(bitShiftRight(rs1.value, 31), 1) AS msb
 SELECT
 	getins_rd(instruction) AS address,
-	toUInt32(getins_i_imm_lower(imm)) AS shift_by,
-	bitAnd(bitShiftRight(rs1.value, 31), 1) AS msb,
 	if(shift_by = 0, rs1.value, bitOr(bitShiftRight(rs1.value, shift_by), bitShiftLeft(msb, 32 - shift_by)) ) AS value
 FROM clickv.ins_srai_null
 JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
@@ -872,13 +875,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_srai_incr_pc TO clickv.pc AS S
 -- "slti" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_slti_null (pc UInt32, instruction UInt32, imm UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_slti_filter TO clickv.ins_slti_null
 AS SELECT pc, instruction, getins_i_imm(instruction) AS imm FROM clickv.next_instruction_of_i_type_bit
 WHERE funct3 = 0x2;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_slti_null (pc UInt32, instruction UInt32, imm UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_slti
 TO clickv.registers
@@ -897,13 +900,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_slti_incr_pc TO clickv.pc AS S
 -- "sltiu" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_sltiu_null (pc UInt32, instruction UInt32, imm UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sltiu_filter TO clickv.ins_sltiu_null
 AS SELECT pc, instruction, getins_i_imm(instruction) AS imm FROM clickv.next_instruction_of_i_type_bit
 WHERE funct3 = 0x3;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_sltiu_null (pc UInt32, instruction UInt32, imm UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sltiu
 TO clickv.registers
@@ -922,13 +925,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sltiu_incr_pc TO clickv.pc AS 
 -- "lui" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_lui_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lui_filter TO clickv.ins_lui_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_u_type
 WHERE opcode = 0x37;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_lui_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lui
 TO clickv.registers
@@ -946,13 +949,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lui_incr_pc TO clickv.pc AS SE
 -- "auipc" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_auipc_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_auipc_filter TO clickv.ins_auipc_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_u_type
 WHERE opcode = 0x17;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_auipc_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_auipc
 TO clickv.registers
@@ -970,13 +973,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_auipc_incr_pc TO clickv.pc AS 
 -- "lb" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_lb_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lb_filter TO clickv.ins_lb_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_i_type_load
 WHERE funct3 = 0x0;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_lb_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lb
 TO clickv.registers
@@ -996,20 +999,21 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lb_incr_pc TO clickv.pc AS SEL
 -- "lh" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_lh_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lh_filter TO clickv.ins_lh_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_i_type_load
 WHERE funct3 = 0x1;
 
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_lh_null (pc UInt32, instruction UInt32) ENGINE = Null;
-
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lh
 TO clickv.registers
 AS
+WITH
+	rs1.value + getins_i_imm(instruction) AS offset
 SELECT
 	getins_rd(instruction) AS address,
-	rs1.value + getins_i_imm(instruction) AS offset,
 	toUInt32(toInt32(toInt16(bitOr(bitShiftLeft(toUInt16(m1.value), 8), m0.value)))) AS value
 FROM clickv.ins_lh_null
 JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
@@ -1024,20 +1028,21 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lh_incr_pc TO clickv.pc AS SEL
 -- "lw" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_lw_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lw_filter TO clickv.ins_lw_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_i_type_load
 WHERE funct3 = 0x2;
 
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_lw_null (pc UInt32, instruction UInt32) ENGINE = Null;
-
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lw
 TO clickv.registers
 AS
+WITH
+	rs1.value + getins_i_imm(instruction) AS offset
 SELECT
 	getins_rd(instruction) AS address,
-	rs1.value + getins_i_imm(instruction) AS offset,
 	bitOr(bitShiftLeft(toUInt32(m3.value), 24), bitOr(bitShiftLeft(toUInt32(m2.value), 16), bitOr(bitShiftLeft(toUInt32(m1.value), 8), toUInt32(m0.value)))) AS value
 FROM clickv.ins_lw_null
 JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
@@ -1054,13 +1059,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lw_incr_pc TO clickv.pc AS SEL
 -- "lbu" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_lbu_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lbu_filter TO clickv.ins_lbu_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_i_type_load
 WHERE funct3 = 0x4;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_lbu_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lbu
 TO clickv.registers
@@ -1080,20 +1085,21 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lbu_incr_pc TO clickv.pc AS SE
 -- "lhu" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_lhu_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lhu_filter TO clickv.ins_lhu_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_i_type_load
 WHERE funct3 = 0x5;
 
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_lhu_null (pc UInt32, instruction UInt32) ENGINE = Null;
-
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lhu
 TO clickv.registers
 AS
+WITH
+	rs1.value + getins_i_imm(instruction) AS offset
 SELECT
 	getins_rd(instruction) AS address,
-	rs1.value + getins_i_imm(instruction) AS offset,
 	bitOr(bitShiftLeft(toUInt16(m1.value), 8), m0.value) AS value
 FROM clickv.ins_lhu_null
 JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
@@ -1108,13 +1114,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lhu_incr_pc TO clickv.pc AS SE
 -- "sb" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_sb_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sb_filter TO clickv.ins_sb_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_s_type
 WHERE funct3 = 0x0;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_sb_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sb
 TO clickv.memory
@@ -1133,22 +1139,22 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sb_incr_pc TO clickv.pc AS SEL
 -- "sh" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_sh_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sh_filter TO clickv.ins_sh_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_s_type
 WHERE funct3 = 0x1;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_sh_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 -- store 2 bytes
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sh_0
 TO clickv.memory
 AS
 WITH
-	[0, 1] AS byte_iter
+	[0, 1] AS byte_iter,
+	rs1.value + getins_s_imm(instruction) AS start_address
 SELECT
-	rs1.value + getins_s_imm(instruction) AS start_address,
 	(arrayJoin(arrayMap((i) -> (start_address + i, toUInt8(bitShiftRight(rs2.value, i * 8))), byte_iter)) AS out).1 AS address,
 	out.2 AS value
 FROM clickv.ins_sh_null
@@ -1162,22 +1168,22 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sh_incr_pc TO clickv.pc AS SEL
 -- "sw" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_sw_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sw_filter TO clickv.ins_sw_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_s_type
 WHERE funct3 = 0x2;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_sw_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 -- store 4 bytes
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sw_0
 TO clickv.memory
 AS
 WITH
-	[0, 1, 2, 3] AS byte_iter
+	[0, 1, 2, 3] AS byte_iter,
+	rs1.value + getins_s_imm(instruction) AS start_address
 SELECT
-	rs1.value + getins_s_imm(instruction) AS start_address,
 	(arrayJoin(arrayMap((i) -> (start_address + i, toUInt8(bitShiftRight(rs2.value, i * 8))), byte_iter)) AS out).1 AS address,
 	out.2 AS value
 FROM clickv.ins_sw_null
@@ -1191,13 +1197,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sw_incr_pc TO clickv.pc AS SEL
 -- "jal" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_jal_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_jal_filter TO clickv.ins_jal_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_j_type
 WHERE opcode = 0b01101111;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_jal_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_jal
 TO clickv.registers
@@ -1217,13 +1223,13 @@ FROM clickv.ins_jal_null;
 -- "jalr" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_jalr_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_jalr_filter TO clickv.ins_jalr_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_j_type
 WHERE opcode = 0b01100111 AND getins_funct3(instruction) = 0x0;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_jalr_null (pc UInt32, instruction UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_jalr
 TO clickv.registers
@@ -1244,18 +1250,19 @@ JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction);
 -- "beq" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_beq_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_beq_filter TO clickv.ins_beq_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_b_type
 WHERE funct3 = 0x0;
 
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_beq_null (pc UInt32, instruction UInt32) ENGINE = Null;
-
 -- branch or skip
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_beq_incr_pc TO clickv.pc AS
+WITH
+	rs1.value = rs2.value AS branch
 SELECT
-	rs1.value = rs2.value AS branch,
 	pc + if(branch, getins_branch_imm(instruction), 4) AS value
 FROM clickv.ins_beq_null
 JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
@@ -1265,18 +1272,19 @@ JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction);
 -- "bne" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_bne_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_bne_filter TO clickv.ins_bne_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_b_type
 WHERE funct3 = 0x1;
 
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_bne_null (pc UInt32, instruction UInt32) ENGINE = Null;
-
 -- branch or skip
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_bne_incr_pc TO clickv.pc AS
+WITH
+	rs1.value != rs2.value AS branch
 SELECT
-	rs1.value != rs2.value AS branch,
 	pc + if(branch, getins_branch_imm(instruction), 4) AS value
 FROM clickv.ins_bne_null
 JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
@@ -1286,18 +1294,19 @@ JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction);
 -- "blt" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_blt_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_blt_filter TO clickv.ins_blt_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_b_type
 WHERE funct3 = 0x4;
 
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_blt_null (pc UInt32, instruction UInt32) ENGINE = Null;
-
 -- branch or skip
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_blt_incr_pc TO clickv.pc AS
+WITH
+	toInt32(rs1.value) < toInt32(rs2.value) AS branch
 SELECT
-	toInt32(rs1.value) < toInt32(rs2.value) AS branch,
 	pc + if(branch, getins_branch_imm(instruction), 4) AS value
 FROM clickv.ins_blt_null
 JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
@@ -1307,18 +1316,19 @@ JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction);
 -- "bge" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_bge_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_bge_filter TO clickv.ins_bge_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_b_type
 WHERE funct3 = 0x5;
 
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_bge_null (pc UInt32, instruction UInt32) ENGINE = Null;
-
 -- branch or skip
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_bge_incr_pc TO clickv.pc AS
+WITH
+	toInt32(rs1.value) >= toInt32(rs2.value) AS branch
 SELECT
-	toInt32(rs1.value) >= toInt32(rs2.value) AS branch,
 	pc + if(branch, getins_branch_imm(instruction), 4) AS value
 FROM clickv.ins_bge_null
 JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
@@ -1328,18 +1338,19 @@ JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction);
 -- "bltu" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_bltu_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_bltu_filter TO clickv.ins_bltu_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_b_type
 WHERE funct3 = 0x6;
 
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_bltu_null (pc UInt32, instruction UInt32) ENGINE = Null;
-
 -- branch or skip
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_bltu_incr_pc TO clickv.pc AS
+WITH
+	rs1.value < rs2.value AS branch
 SELECT
-	rs1.value < rs2.value AS branch,
 	pc + if(branch, getins_branch_imm(instruction), 4) AS value
 FROM clickv.ins_bltu_null
 JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
@@ -1349,18 +1360,19 @@ JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction);
 -- "bgeu" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_bgeu_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_bgeu_filter TO clickv.ins_bgeu_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_b_type
 WHERE funct3 = 0x7;
 
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_bgeu_null (pc UInt32, instruction UInt32) ENGINE = Null;
-
 -- branch or skip
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_bgeu_incr_pc TO clickv.pc AS
+WITH
+	rs1.value >= rs2.value AS branch
 SELECT
-	rs1.value >= rs2.value AS branch,
 	pc + if(branch, getins_branch_imm(instruction), 4) AS value
 FROM clickv.ins_bgeu_null
 JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
@@ -1370,13 +1382,13 @@ JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction);
 -- "ecall" instruction
 ----------------------------------------------------------------------------
 
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_ecall_null (pc UInt32, instruction UInt32, syscall_n UInt32) ENGINE = Null;
+
 -- instruction filter, reads syscall number from a7 register
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_filter TO clickv.ins_ecall_null
 AS SELECT pc, instruction, (SELECT value FROM clickv.registers WHERE address = 0x11) AS syscall_n FROM clickv.next_instruction_of_system_type
 WHERE getins_i_imm(instruction) = 0x0 AND syscall_n > 0;
-
--- trigger instruction execution
-CREATE TABLE IF NOT EXISTS clickv.ins_ecall_null (pc UInt32, instruction UInt32, syscall_n UInt32) ENGINE = Null;
 
 ---------------------------
 -- syscall PRINT (0x1)
@@ -1387,9 +1399,9 @@ TO clickv.print
 AS
 WITH
 	(SELECT value FROM clickv.registers WHERE address = 0xA) AS text_ptr, -- a0
-	(SELECT value FROM clickv.registers WHERE address = 0xB) AS text_len -- a1
+	(SELECT value FROM clickv.registers WHERE address = 0xB) AS text_len, -- a1
+	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory WHERE address >= text_ptr AND address < (text_ptr + text_len) ORDER BY address ASC)) AS text_bytes
 SELECT
-	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory WHERE address >= text_ptr AND address < (text_ptr + text_len) ORDER BY address ASC)) text_bytes,
 	arrayStringConcat(arrayMap(x -> char(x), text_bytes)) AS message
 FROM clickv.ins_ecall_null
 WHERE syscall_n = 0x1;
@@ -1399,6 +1411,8 @@ WHERE syscall_n = 0x1;
 -- syscall DRAW (0x2)
 ---------------------------
 
+CREATE TABLE IF NOT EXISTS clickv.ins_ecall_draw_null (_ UInt8) ENGINE = Null;
+
 -- Drawing is expensive. Check the syscall here before actually processing drawing.
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_draw_filter
 TO clickv.ins_ecall_draw_null
@@ -1406,16 +1420,15 @@ AS
 SELECT 0 AS _ FROM clickv.ins_ecall_null
 WHERE syscall_n = 0x2;
 
-CREATE TABLE IF NOT EXISTS clickv.ins_ecall_draw_null (_ UInt8) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_draw
 TO clickv.frame
 AS
 WITH
 	-- add 1 to end to fix end of frame.
-	range(1, 800 + 1, 1) AS cell_iter
+	range(1, 800 + 1, 1) AS cell_iter,
+	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory WHERE address >= 0x00000C00 AND address < (0x00000C00 + 800) ORDER BY address ASC)) AS cells
 SELECT
-	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory WHERE address >= 0x00000C00 AND address < (0x00000C00 + 800) ORDER BY address ASC)) cells,
 	concat(
 		concat(char(27), '[2J', char(27), '[1;1H'),
 		arrayStringConcat(arrayMap(i -> concat(char(27), '[', toString(arrayElement(cells, i)), 'm', '█', if(i % 40 = 0, '\n', '')), cell_iter))
@@ -1426,13 +1439,13 @@ FROM clickv.ins_ecall_draw_null;
 -- ClickOS OPEN
 ---------------------------
 
+CREATE TABLE IF NOT EXISTS clickv.ins_ecall_clickos_open_null (syscall_n UInt32) ENGINE = Null;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_clickos_open_filter
 TO clickv.ins_ecall_clickos_open_null
 AS
 SELECT syscall_n FROM clickv.ins_ecall_null
 WHERE syscall_n = 10;
-
-CREATE TABLE IF NOT EXISTS clickv.ins_ecall_clickos_open_null (syscall_n UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_clickos_open
 TO clickv.registers
@@ -1440,11 +1453,11 @@ AS
 WITH
 	(SELECT value FROM clickv.registers WHERE address = 0xA) AS path_name_ptr, -- a0
 	(SELECT value FROM clickv.registers WHERE address = 0xB) AS path_name_len, -- a1
-	(SELECT value FROM clickv.registers WHERE address = 0xC) AS flags -- a2
-SELECT
-	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory WHERE address >= path_name_ptr AND address < (path_name_ptr + path_name_len) ORDER BY address ASC)) path_name_bytes,
+	(SELECT value FROM clickv.registers WHERE address = 0xC) AS flags, -- a2
+	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory WHERE address >= path_name_ptr AND address < (path_name_ptr + path_name_len) ORDER BY address ASC)) AS path_name_bytes,
 	arrayConcat(path_name_bytes, [0], uint32_to_byte_array(flags)) AS request_bytes,
-	clickos_syscall(syscall_n, request_bytes) AS response_bytes,
+	clickos_syscall(syscall_n, request_bytes) AS response_bytes
+SELECT
 	0xA AS address, -- a0
 	byte_array_to_uint32(response_bytes) AS value -- fd
 FROM clickv.ins_ecall_clickos_open_null;
@@ -1453,21 +1466,21 @@ FROM clickv.ins_ecall_clickos_open_null;
 -- ClickOS CLOSE
 ---------------------------
 
+CREATE TABLE IF NOT EXISTS clickv.ins_ecall_clickos_close_null (syscall_n UInt32) ENGINE = Null;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_clickos_close_filter
 TO clickv.ins_ecall_clickos_close_null
 AS
 SELECT syscall_n FROM clickv.ins_ecall_null
 WHERE syscall_n = 11;
 
-CREATE TABLE IF NOT EXISTS clickv.ins_ecall_clickos_close_null (syscall_n UInt32) ENGINE = Null;
-
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_clickos_close
 TO clickv.registers
 AS
 WITH
-	(SELECT value FROM clickv.registers WHERE address = 0xA) AS fd -- a0
+	(SELECT value FROM clickv.registers WHERE address = 0xA) AS fd, -- a0
+	clickos_syscall(syscall_n, arrayConcat(uint32_to_byte_array(fd))) AS response_bytes
 SELECT
-	clickos_syscall(syscall_n, arrayConcat(uint32_to_byte_array(fd))) AS response_bytes,
 	0xA AS address, -- a0
 	byte_array_to_uint32(response_bytes) AS value -- status
 FROM clickv.ins_ecall_clickos_close_null;
@@ -1476,13 +1489,13 @@ FROM clickv.ins_ecall_clickos_close_null;
 -- ClickOS SEEK
 ---------------------------
 
+CREATE TABLE IF NOT EXISTS clickv.ins_ecall_clickos_seek_null (syscall_n UInt32) ENGINE = Null;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_clickos_seek_filter
 TO clickv.ins_ecall_clickos_seek_null
 AS
 SELECT syscall_n FROM clickv.ins_ecall_null
 WHERE syscall_n = 12;
-
-CREATE TABLE IF NOT EXISTS clickv.ins_ecall_clickos_seek_null (syscall_n UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_clickos_seek
 TO clickv.registers
@@ -1490,9 +1503,9 @@ AS
 WITH
 	(SELECT value FROM clickv.registers WHERE address = 0xA) AS fd, -- a0
 	(SELECT value FROM clickv.registers WHERE address = 0xB) AS offset, -- a1
-	(SELECT value FROM clickv.registers WHERE address = 0xC) AS whence -- a2
+	(SELECT value FROM clickv.registers WHERE address = 0xC) AS whence, -- a2
+	clickos_syscall(syscall_n, arrayConcat(uint32_to_byte_array(fd), uint32_to_byte_array(offset), uint32_to_byte_array(whence))) AS response_bytes
 SELECT
-	clickos_syscall(syscall_n, arrayConcat(uint32_to_byte_array(fd), uint32_to_byte_array(offset), uint32_to_byte_array(whence))) AS response_bytes,
 	0xA AS address, -- a0
 	byte_array_to_uint32(response_bytes) AS value -- current_seek
 FROM clickv.ins_ecall_clickos_seek_null;
@@ -1501,38 +1514,38 @@ FROM clickv.ins_ecall_clickos_seek_null;
 -- ClickOS READ
 ---------------------------
 
+CREATE TABLE IF NOT EXISTS clickv.ins_ecall_clickos_read_null (syscall_n UInt32) ENGINE = Null;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_clickos_read_filter
 TO clickv.ins_ecall_clickos_read_null
 AS
 SELECT syscall_n FROM clickv.ins_ecall_null
 WHERE syscall_n = 13;
 
-CREATE TABLE IF NOT EXISTS clickv.ins_ecall_clickos_read_null (syscall_n UInt32) ENGINE = Null;
-
 -- perform the actual file read via UDF
+CREATE TABLE IF NOT EXISTS clickv.ins_ecall_clickos_read_output_null (bytes_read UInt32, bytes Array(UInt8)) ENGINE = Null;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_clickos_read
 TO clickv.ins_ecall_clickos_read_output_null
 AS
 WITH
 	(SELECT value FROM clickv.registers WHERE address = 0xA) AS fd, -- a0
-	(SELECT value FROM clickv.registers WHERE address = 0xC) AS count -- a2
+	(SELECT value FROM clickv.registers WHERE address = 0xC) AS count, -- a2
+	clickos_syscall(syscall_n, arrayConcat(uint32_to_byte_array(fd), uint32_to_byte_array(count))) AS response_bytes
 SELECT
-	clickos_syscall(syscall_n, arrayConcat(uint32_to_byte_array(fd), uint32_to_byte_array(count))) AS response_bytes,
 	byte_array_to_uint32(response_bytes) AS bytes_read,
 	arraySlice(response_bytes, 5) AS bytes -- trim first 4 bytes
 FROM clickv.ins_ecall_clickos_read_null;
-
-CREATE TABLE IF NOT EXISTS clickv.ins_ecall_clickos_read_output_null (bytes_read UInt32, bytes Array(UInt8)) ENGINE = Null;
 
 -- set bytes in memory
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_clickos_read_output_memory
 TO clickv.memory
 AS
 WITH
-	(SELECT value FROM clickv.registers WHERE address = 0xB) AS buffer_ptr -- a1
-SELECT
+	(SELECT value FROM clickv.registers WHERE address = 0xB) AS buffer_ptr, -- a1
 	-- safe iterator range
-	range(0, if(bytes_read < 0 OR bytes_read > 0x10000, 0, bytes_read), 1) AS byte_iter,
+	range(0, if(bytes_read < 0 OR bytes_read > 0x10000, 0, bytes_read), 1) AS byte_iter
+SELECT
 	(arrayJoin(arrayMap((i) -> (buffer_ptr + i, arrayElement(bytes, i+1)), byte_iter)) AS out).1 AS address,
 	out.2 AS value
 FROM clickv.ins_ecall_clickos_read_output_null
@@ -1551,13 +1564,13 @@ FROM clickv.ins_ecall_clickos_read_output_null;
 -- ClickOS WRITE
 ---------------------------
 
+CREATE TABLE IF NOT EXISTS clickv.ins_ecall_clickos_write_null (syscall_n UInt32) ENGINE = Null;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_clickos_write_filter
 TO clickv.ins_ecall_clickos_write_null
 AS
 SELECT syscall_n FROM clickv.ins_ecall_null
 WHERE syscall_n = 14;
-
-CREATE TABLE IF NOT EXISTS clickv.ins_ecall_clickos_write_null (syscall_n UInt32) ENGINE = Null;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_clickos_write
 TO clickv.registers
@@ -1565,10 +1578,10 @@ AS
 WITH
 	(SELECT value FROM clickv.registers WHERE address = 0xA) AS fd, -- a0
 	(SELECT value FROM clickv.registers WHERE address = 0xB) AS buffer_ptr, -- a1
-	(SELECT value FROM clickv.registers WHERE address = 0xC) AS count -- a2
+	(SELECT value FROM clickv.registers WHERE address = 0xC) AS count, -- a2
+	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory WHERE address >= buffer_ptr AND address < (buffer_ptr + count) ORDER BY address ASC)) AS buffer_bytes,
+	clickos_syscall(syscall_n, arrayConcat(uint32_to_byte_array(fd), buffer_bytes)) AS response_bytes
 SELECT
-	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory WHERE address >= buffer_ptr AND address < (buffer_ptr + count) ORDER BY address ASC)) buffer_bytes,
-	clickos_syscall(syscall_n, arrayConcat(uint32_to_byte_array(fd), buffer_bytes)) AS response_bytes,
 	0xA AS address, -- a0
 	byte_array_to_uint32(response_bytes) AS value -- bytes written, or error
 FROM clickv.ins_ecall_clickos_write_null;
@@ -1577,24 +1590,24 @@ FROM clickv.ins_ecall_clickos_write_null;
 -- ClickOS SOCKET
 ---------------------------
 
+CREATE TABLE IF NOT EXISTS clickv.ins_ecall_clickos_socket_null (syscall_n UInt32) ENGINE = Null;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_clickos_socket_filter
 TO clickv.ins_ecall_clickos_socket_null
 AS
 SELECT syscall_n FROM clickv.ins_ecall_null
 WHERE syscall_n = 15;
 
-CREATE TABLE IF NOT EXISTS clickv.ins_ecall_clickos_socket_null (syscall_n UInt32) ENGINE = Null;
-
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_clickos_socket
 TO clickv.registers
 AS
 WITH
 	(SELECT value FROM clickv.registers WHERE address = 0xA) AS address_ptr, -- a0
-	(SELECT value FROM clickv.registers WHERE address = 0xB) AS address_len -- a1
-SELECT
-	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory WHERE address >= address_ptr AND address < (address_ptr + address_len) ORDER BY address ASC)) address_bytes,
+	(SELECT value FROM clickv.registers WHERE address = 0xB) AS address_len, -- a1
+	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory WHERE address >= address_ptr AND address < (address_ptr + address_len) ORDER BY address ASC)) AS address_bytes,
 	arrayConcat(address_bytes, [0]) AS request_bytes,
-	clickos_syscall(syscall_n, request_bytes) AS response_bytes,
+	clickos_syscall(syscall_n, request_bytes) AS response_bytes
+SELECT
 	0xA AS address, -- a0
 	byte_array_to_uint32(response_bytes) AS value -- socket fd
 FROM clickv.ins_ecall_clickos_socket_null;
