@@ -352,13 +352,15 @@ CREATE LIVE VIEW clickv.display_frame AS SELECT d FROM clickv.frame WHERE t > (n
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 -- Materialized view for next instruction
-CREATE TABLE IF NOT EXISTS clickv.next_instruction (pc UInt32, instruction UInt32, opcode UInt8, funct3 UInt8, ins_bytes Array(UInt32)) ENGINE = Null;
+CREATE TABLE IF NOT EXISTS clickv.next_instruction (pc UInt32, instruction UInt32, opcode UInt8, funct3 UInt8) ENGINE = Null;
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.get_next_instruction
 TO clickv.next_instruction
 AS
-SELECT
+WITH
 	(SELECT value FROM clickv.pc) AS pc,
-	(SELECT groupArray(toUInt32(value)) FROM (SELECT address, value FROM clickv.memory WHERE address IN (pc, pc + 0x1, pc + 0x2, pc + 0x3) ORDER BY address ASC)) AS ins_bytes,
+	(SELECT groupArray(toUInt32(value)) FROM (SELECT address, value FROM clickv.memory WHERE address IN (pc, pc + 0x1, pc + 0x2, pc + 0x3) ORDER BY address ASC)) AS ins_bytes
+SELECT
+	pc,
 	bitOr(bitShiftLeft(arrayElement(ins_bytes, 4), 24), bitOr(bitShiftLeft(arrayElement(ins_bytes, 3), 16), bitOr(bitShiftLeft(arrayElement(ins_bytes, 2), 8), arrayElement(ins_bytes, 1)))) AS instruction,
 	getins_opcode(instruction) AS opcode,
 	getins_funct3(instruction) AS funct3
