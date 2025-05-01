@@ -21,7 +21,7 @@ end:
 _start:
         addi a7, zero, 1
         la a0, msg
-        addi a2, zero, 12
+        addi a1, zero, 12
         ecall
 
 msg:
