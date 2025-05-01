@@ -449,8 +449,8 @@ SELECT
 	getins_rd(instruction) AS address,
 	rs1.value + rs2.value AS value
 FROM clickv.ins_add_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
-JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction) 
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -476,8 +476,8 @@ SELECT
 	getins_rd(instruction) AS address,
 	rs1.value - rs2.value AS value
 FROM clickv.ins_sub_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
-JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction)
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -502,8 +502,8 @@ SELECT
 	getins_rd(instruction) AS address,
 	bitXor(rs1.value, rs2.value) AS value
 FROM clickv.ins_xor_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
-JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction) 
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -528,8 +528,8 @@ SELECT
 	getins_rd(instruction) AS address,
 	bitOr(rs1.value, rs2.value) AS value
 FROM clickv.ins_or_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
-JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction) 
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -554,8 +554,8 @@ SELECT
 	getins_rd(instruction) AS address,
 	bitAnd(rs1.value, rs2.value) AS value
 FROM clickv.ins_and_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
-JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction) 
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -580,8 +580,8 @@ SELECT
 	getins_rd(instruction) AS address,
 	bitShiftLeft(rs1.value, rs2.value) AS value
 FROM clickv.ins_sll_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
-JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction) 
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -607,8 +607,8 @@ SELECT
 	getins_rd(instruction) AS address,
 	bitShiftRight(rs1.value, rs2.value) AS value
 FROM clickv.ins_srl_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
-JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction) 
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -636,8 +636,8 @@ SELECT
 	getins_rd(instruction) AS address,
 	if(shift_by = 0, rs1.value, bitOr(bitShiftRight(rs1.value, shift_by), bitShiftLeft(msb, 32 - shift_by)) ) AS value
 FROM clickv.ins_sra_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
-JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction) 
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -662,8 +662,8 @@ SELECT
 	getins_rd(instruction) AS address,
 	if(toInt32(rs1.value) < toInt32(rs2.value), 1, 0) AS value
 FROM clickv.ins_slt_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
-JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction) 
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -688,8 +688,8 @@ SELECT
 	getins_rd(instruction) AS address,
 	if(rs1.value < rs2.value, 1, 0) AS value
 FROM clickv.ins_sltu_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
-JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction) 
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -714,7 +714,7 @@ SELECT
 	getins_rd(instruction) AS address,
 	rs1.value + getins_i_imm(instruction) AS value
 FROM clickv.ins_addi_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -739,7 +739,7 @@ SELECT
 	getins_rd(instruction) AS address,
 	bitXor(rs1.value, getins_i_imm(instruction)) AS value
 FROM clickv.ins_xori_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -764,7 +764,7 @@ SELECT
 	getins_rd(instruction) AS address,
 	bitOr(rs1.value, getins_i_imm(instruction)) AS value
 FROM clickv.ins_ori_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -789,7 +789,7 @@ SELECT
 	getins_rd(instruction) AS address,
 	bitAnd(rs1.value, getins_i_imm(instruction)) AS value
 FROM clickv.ins_andi_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -814,7 +814,7 @@ SELECT
 	getins_rd(instruction) AS address,
 	bitShiftLeft(rs1.value, toUInt32(getins_i_imm_lower(imm))) AS value
 FROM clickv.ins_slli_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -839,7 +839,7 @@ SELECT
 	getins_rd(instruction) AS address,
 	bitShiftRight(rs1.value, toUInt32(getins_i_imm_lower(imm))) AS value
 FROM clickv.ins_srli_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -867,7 +867,7 @@ SELECT
 	getins_rd(instruction) AS address,
 	if(shift_by = 0, rs1.value, bitOr(bitShiftRight(rs1.value, shift_by), bitShiftLeft(msb, 32 - shift_by)) ) AS value
 FROM clickv.ins_srai_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -892,7 +892,7 @@ SELECT
 	getins_rd(instruction) AS address,
 	if(toInt32(rs1.value) < getins_i_imm_lower(imm), 1, 0) AS value
 FROM clickv.ins_slti_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -917,7 +917,7 @@ SELECT
 	getins_rd(instruction) AS address,
 	if(rs1.value < toUInt32(getins_i_imm_lower(imm)), 1, 0) AS value
 FROM clickv.ins_sltiu_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction) 
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -990,8 +990,8 @@ SELECT
 	getins_rd(instruction) AS address,
 	toUInt32(toInt32(toInt8(m.value))) AS value
 FROM clickv.ins_lb_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
-JOIN clickv.memory m ON m.address = rs1.value + getins_i_imm(instruction)
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.memory m ON m.address::UInt32 = (rs1.value + getins_i_imm(instruction))::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -1018,9 +1018,9 @@ SELECT
 	getins_rd(instruction) AS address,
 	toUInt32(toInt32(toInt16(bitOr(bitShiftLeft(toUInt16(m1.value), 8), m0.value)))) AS value
 FROM clickv.ins_lh_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
-JOIN clickv.memory m0 ON m0.address = offset
-JOIN clickv.memory m1 ON m1.address = offset + 0x1
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.memory m0 ON m0.address::UInt32 = offset::UInt32
+JOIN clickv.memory m1 ON m1.address::UInt32 = (offset + 0x1)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -1047,11 +1047,11 @@ SELECT
 	getins_rd(instruction) AS address,
 	bitOr(bitShiftLeft(toUInt32(m3.value), 24), bitOr(bitShiftLeft(toUInt32(m2.value), 16), bitOr(bitShiftLeft(toUInt32(m1.value), 8), toUInt32(m0.value)))) AS value
 FROM clickv.ins_lw_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
-JOIN clickv.memory m0 ON m0.address = offset
-JOIN clickv.memory m1 ON m1.address = offset + 0x1
-JOIN clickv.memory m2 ON m2.address = offset + 0x2
-JOIN clickv.memory m3 ON m3.address = offset + 0x3
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.memory m0 ON m0.address::UInt32 = offset::UInt32
+JOIN clickv.memory m1 ON m1.address::UInt32 = (offset + 0x1)::UInt32
+JOIN clickv.memory m2 ON m2.address::UInt32 = (offset + 0x2)::UInt32
+JOIN clickv.memory m3 ON m3.address::UInt32 = (offset + 0x3)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -1076,8 +1076,8 @@ SELECT
 	getins_rd(instruction) AS address,
 	toUInt32(m.value) AS value
 FROM clickv.ins_lbu_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
-JOIN clickv.memory m ON m.address = rs1.value + getins_i_imm(instruction)
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.memory m ON m.address::UInt32 = (rs1.value + getins_i_imm(instruction))::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -1104,9 +1104,9 @@ SELECT
 	getins_rd(instruction) AS address,
 	bitOr(bitShiftLeft(toUInt16(m1.value), 8), m0.value) AS value
 FROM clickv.ins_lhu_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
-JOIN clickv.memory m0 ON m0.address = offset
-JOIN clickv.memory m1 ON m1.address = offset + 0x1
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.memory m0 ON m0.address::UInt32 = offset::UInt32
+JOIN clickv.memory m1 ON m1.address::UInt32 = (offset + 0x1)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -1131,8 +1131,8 @@ SELECT
 	rs1.value + getins_s_imm(instruction) AS address,
 	toUInt8(rs2.value) AS value
 FROM clickv.ins_sb_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
-JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction);
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32;
 
 -- increment PC
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sb_incr_pc TO clickv.pc AS SELECT pc + 4 AS value FROM clickv.ins_sb_null;
@@ -1160,8 +1160,8 @@ SELECT
 	(arrayJoin(arrayMap((i) -> (start_address + i, toUInt8(bitShiftRight(rs2.value, i * 8))), byte_iter)) AS out).1 AS address,
 	out.2 AS value
 FROM clickv.ins_sh_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
-JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction);
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32;
 
 -- increment PC
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sh_incr_pc TO clickv.pc AS SELECT pc + 4 AS value FROM clickv.ins_sh_null;
@@ -1189,8 +1189,8 @@ SELECT
 	(arrayJoin(arrayMap((i) -> (start_address + i, toUInt8(bitShiftRight(rs2.value, i * 8))), byte_iter)) AS out).1 AS address,
 	out.2 AS value
 FROM clickv.ins_sw_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
-JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction);
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32;
 
 -- increment PC
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sw_incr_pc TO clickv.pc AS SELECT pc + 4 AS value FROM clickv.ins_sw_null;
@@ -1246,7 +1246,7 @@ WHERE address != 0;
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_jalr_incr_pc TO clickv.pc AS
 SELECT rs1.value + getins_i_imm(instruction) AS value
 FROM clickv.ins_jalr_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction);
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32;
 
 ----------------------------------------------------------------------------
 -- "beq" instruction
@@ -1267,8 +1267,8 @@ WITH
 SELECT
 	pc + if(branch, getins_branch_imm(instruction), 4) AS value
 FROM clickv.ins_beq_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
-JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction);
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32;
 
 ----------------------------------------------------------------------------
 -- "bne" instruction
@@ -1289,8 +1289,8 @@ WITH
 SELECT
 	pc + if(branch, getins_branch_imm(instruction), 4) AS value
 FROM clickv.ins_bne_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
-JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction);
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32;
 
 ----------------------------------------------------------------------------
 -- "blt" instruction
@@ -1311,8 +1311,8 @@ WITH
 SELECT
 	pc + if(branch, getins_branch_imm(instruction), 4) AS value
 FROM clickv.ins_blt_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
-JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction);
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32;
 
 ----------------------------------------------------------------------------
 -- "bge" instruction
@@ -1333,8 +1333,8 @@ WITH
 SELECT
 	pc + if(branch, getins_branch_imm(instruction), 4) AS value
 FROM clickv.ins_bge_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
-JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction);
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32;
 
 ----------------------------------------------------------------------------
 -- "bltu" instruction
@@ -1355,8 +1355,8 @@ WITH
 SELECT
 	pc + if(branch, getins_branch_imm(instruction), 4) AS value
 FROM clickv.ins_bltu_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
-JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction);
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32;
 
 ----------------------------------------------------------------------------
 -- "bgeu" instruction
@@ -1377,8 +1377,8 @@ WITH
 SELECT
 	pc + if(branch, getins_branch_imm(instruction), 4) AS value
 FROM clickv.ins_bgeu_null
-JOIN clickv.registers rs1 ON rs1.address = getins_rs1(instruction)
-JOIN clickv.registers rs2 ON rs2.address = getins_rs2(instruction);
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32;
 
 ----------------------------------------------------------------------------
 -- "ecall" instruction
