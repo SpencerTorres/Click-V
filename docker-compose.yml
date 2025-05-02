@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:head
+    container_name: clickhouse-server
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    network_mode: "host"
+    volumes:
+      - ./udfs/clickos_client:/var/lib/clickhouse/user_scripts/clickos_client
+      - ./udfs/clickos_syscall_function.xml:/etc/clickhouse-server/clickos_syscall_function.xml
+      - ./config:/etc/clickhouse-server/config.d
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_SKIP_USER_SETUP: 1

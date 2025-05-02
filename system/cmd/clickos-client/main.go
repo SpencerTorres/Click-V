@@ -16,7 +16,7 @@ import (
 // clickos_syscall_function.xml -> /etc/clickhouse-server/clickos_syscall_function.xml
 // clickos_client --> /var/lib/clickhouse/user_scripts/clickos_client
 
-const defaultServerAddr = "host.docker.internal:9008"
+const defaultServerAddr = "localhost:9008"
 
 func main() {
 	logFile := setupLogging()
