@@ -1655,6 +1655,17 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_incr_pc TO clickv.pc AS 
 	-- Live-update frame
 		-- WATCH clickv.display_frame FORMAT RawBLOB;
 
+-- Other option to show frame:
+	-- WITH
+	-- 	-- add 1 to end to fix end of frame.
+	-- 	range(1, 800 + 1, 1) AS cell_iter,
+	-- 	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory WHERE address >= 0x00000C00 AND address < (0x00000C00 + 800) ORDER BY address ASC)) AS cells
+	-- SELECT
+	-- 	concat(
+	-- 		concat(char(27), '[2J', char(27), '[1;1H'),
+	-- 		arrayStringConcat(arrayMap(i -> concat(char(27), '[', toString(arrayElement(cells, i)), 'm', '█', if(i % 40 = 0, '\n', '')), cell_iter))
+	-- 	 ) AS d FORMAT RawBLOB;
+
 ---------------------------------------
 -- Reset + Load Program for Click-V
 ---------------------------------------
