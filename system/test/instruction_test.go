@@ -15,6 +15,8 @@ import (
 /**
  * This file assumes the CPU has been set up once.
  * The tests will handle resetting memory/program.
+ *
+ * optionally clear test cache: go clean -testcache
  */
 
 const ROM_SIZE uint32 = 128                 // We don't need more than a few instructions
