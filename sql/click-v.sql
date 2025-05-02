@@ -230,10 +230,31 @@ INSERT INTO clickv.pc (value) VALUES (0); -- initialize to 0
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 -- Redis In-Memory Registers
+-- CREATE TABLE IF NOT EXISTS clickv.registers (address UInt8, value UInt32)
+-- ENGINE = Redis('localhost:6379')
+-- PRIMARY KEY (address);
+-- TRUNCATE TABLE clickv.registers SYNC;
+
+-- ClickHouse In-Memory Registers
 CREATE TABLE IF NOT EXISTS clickv.registers (address UInt8, value UInt32)
-ENGINE = Redis('localhost:6379')
-PRIMARY KEY (address);
-TRUNCATE TABLE clickv.registers SYNC;
+ENGINE = Memory SETTINGS min_rows_to_keep = 32, max_rows_to_keep = 32;
+
+-- Copy-on-write registers
+CREATE TABLE IF NOT EXISTS clickv.write_register (address UInt8, value UInt32) ENGINE = Null;
+CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.copy_on_write_registers
+TO clickv.registers
+AS
+SELECT
+	(
+		arrayJoin(
+			arrayConcat(
+				(SELECT groupArray((rr.address, wr.value)) FROM clickv.registers rr LEFT JOIN clickv.write_register wr ON wr.address == rr.address),
+				[(wr.address, wr.value)]
+			)
+		) AS next_registers
+	).1 AS address,
+	next_registers.2 AS value
+FROM clickv.write_register wr;
 
 -- zero register + 31 general-purpose registers. Initialize to 0.
 INSERT INTO clickv.registers (address, value) SELECT number AS address, 0 AS value FROM numbers(1 + 31);
@@ -250,10 +271,35 @@ CREATE VIEW IF NOT EXISTS clickv.display_registers AS SELECT address, get_regist
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 -- Redis In-Memory RAM
+-- CREATE TABLE IF NOT EXISTS clickv.memory (address UInt32, value UInt8)
+-- ENGINE = Redis('localhost:6379', 1)
+-- PRIMARY KEY (address);
+-- TRUNCATE TABLE clickv.memory SYNC;
+
+-- ClickHouse In-Memory RAM
+-- ClickHouse In-Memory Registers
 CREATE TABLE IF NOT EXISTS clickv.memory (address UInt32, value UInt8)
-ENGINE = Redis('localhost:6379', 1)
-PRIMARY KEY (address);
-TRUNCATE TABLE clickv.memory SYNC;
+ENGINE = Memory SETTINGS min_rows_to_keep = 3872, max_rows_to_keep = 3872;
+
+-- Copy-on-write memory
+CREATE TABLE IF NOT EXISTS clickv.write_memory (address UInt32, value UInt8) ENGINE = Null;
+CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.copy_on_write_memory
+TO clickv.memory
+AS
+SELECT
+	(
+		arrayJoin(
+			arrayConcat(
+				arrayFilter(
+					x -> x.1 != wm.address,
+					(SELECT groupArray((rm.address, rm.value)) FROM clickv.memory rm)
+				),
+				[(wm.address, wm.value)]
+			)
+		) AS next_memory
+	).1 AS address,
+	next_memory.2 AS value
+FROM clickv.write_memory wm;
 
 CREATE VIEW IF NOT EXISTS clickv.display_memory
 AS
@@ -443,7 +489,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
 WHERE funct3 = 0x0 AND getins_r_funct7(instruction) = 0x00;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_add
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -470,7 +516,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
 WHERE funct3 = 0x0 AND getins_r_funct7(instruction) = 0x20;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sub
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -496,7 +542,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
 WHERE funct3 = 0x4 AND getins_r_funct7(instruction) = 0x00;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_xor
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -522,7 +568,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
 WHERE funct3 = 0x6 AND getins_r_funct7(instruction) = 0x00;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_or
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -548,7 +594,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
 WHERE funct3 = 0x7 AND getins_r_funct7(instruction) = 0x00;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_and
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -574,7 +620,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
 WHERE funct3 = 0x1 AND getins_r_funct7(instruction) = 0x00;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sll
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -601,7 +647,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
 WHERE funct3 = 0x5 AND getins_r_funct7(instruction) = 0x00;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_srl
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -627,7 +673,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
 WHERE funct3 = 0x5 AND getins_r_funct7(instruction) = 0x20;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sra
-TO clickv.registers
+TO clickv.write_register
 AS
 WITH
 	bitAnd(rs2.value, 0x1F) AS shift_by,
@@ -656,7 +702,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
 WHERE funct3 = 0x2 AND getins_r_funct7(instruction) = 0x0;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_slt
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -682,7 +728,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
 WHERE funct3 = 0x3 AND getins_r_funct7(instruction) = 0x0;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sltu
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -708,7 +754,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_i_type_bit
 WHERE funct3 = 0x0;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_addi
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -733,7 +779,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_i_type_bit
 WHERE funct3 = 0x4;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_xori
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -758,7 +804,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_i_type_bit
 WHERE funct3 = 0x6;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ori
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -783,7 +829,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_i_type_bit
 WHERE funct3 = 0x7;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_andi
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -808,7 +854,7 @@ AS SELECT pc, instruction, getins_i_imm(instruction) AS imm FROM clickv.next_ins
 WHERE funct3 = 0x1 AND getins_i_imm_upper(imm) = 0x0;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_slli
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -833,7 +879,7 @@ AS SELECT pc, instruction, getins_i_imm(instruction) AS imm FROM clickv.next_ins
 WHERE funct3 = 0x5 AND getins_i_imm_upper(imm) = 0x0;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_srli
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -858,7 +904,7 @@ AS SELECT pc, instruction, getins_i_imm(instruction) AS imm FROM clickv.next_ins
 WHERE funct3 = 0x5 AND getins_i_imm_upper(imm) = 0x20;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_srai
-TO clickv.registers
+TO clickv.write_register
 AS
 WITH
 	toUInt32(getins_i_imm_lower(imm)) AS shift_by,
@@ -886,7 +932,7 @@ AS SELECT pc, instruction, getins_i_imm(instruction) AS imm FROM clickv.next_ins
 WHERE funct3 = 0x2;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_slti
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -911,7 +957,7 @@ AS SELECT pc, instruction, getins_i_imm(instruction) AS imm FROM clickv.next_ins
 WHERE funct3 = 0x3;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sltiu
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -936,7 +982,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_u_type
 WHERE opcode = 0x37;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lui
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -960,7 +1006,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_u_type
 WHERE opcode = 0x17;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_auipc
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -984,7 +1030,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_i_type_load
 WHERE funct3 = 0x0;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lb
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -1010,7 +1056,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_i_type_load
 WHERE funct3 = 0x1;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lh
-TO clickv.registers
+TO clickv.write_register
 AS
 WITH
 	rs1.value + getins_i_imm(instruction) AS offset
@@ -1039,7 +1085,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_i_type_load
 WHERE funct3 = 0x2;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lw
-TO clickv.registers
+TO clickv.write_register
 AS
 WITH
 	rs1.value + getins_i_imm(instruction) AS offset
@@ -1070,7 +1116,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_i_type_load
 WHERE funct3 = 0x4;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lbu
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -1096,7 +1142,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_i_type_load
 WHERE funct3 = 0x5;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_lhu
-TO clickv.registers
+TO clickv.write_register
 AS
 WITH
 	rs1.value + getins_i_imm(instruction) AS offset
@@ -1125,7 +1171,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_s_type
 WHERE funct3 = 0x0;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sb
-TO clickv.memory
+TO clickv.write_memory
 AS
 SELECT
 	rs1.value + getins_s_imm(instruction) AS address,
@@ -1151,7 +1197,7 @@ WHERE funct3 = 0x1;
 
 -- store 2 bytes
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sh_0
-TO clickv.memory
+TO clickv.write_memory
 AS
 WITH
 	[0, 1] AS byte_iter,
@@ -1180,7 +1226,7 @@ WHERE funct3 = 0x2;
 
 -- store 4 bytes
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_sw_0
-TO clickv.memory
+TO clickv.write_memory
 AS
 WITH
 	[0, 1, 2, 3] AS byte_iter,
@@ -1208,7 +1254,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_j_type
 WHERE opcode = 0b01101111;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_jal
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -1234,7 +1280,7 @@ AS SELECT pc, instruction FROM clickv.next_instruction_of_j_type
 WHERE opcode = 0b01100111 AND getins_funct3(instruction) = 0x0;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_jalr
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	getins_rd(instruction) AS address,
@@ -1450,7 +1496,7 @@ SELECT syscall_n FROM clickv.ins_ecall_null
 WHERE syscall_n = 10;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_clickos_open
-TO clickv.registers
+TO clickv.write_register
 AS
 WITH
 	(SELECT value FROM clickv.registers WHERE address = 0xA) AS path_name_ptr, -- a0
@@ -1477,7 +1523,7 @@ SELECT syscall_n FROM clickv.ins_ecall_null
 WHERE syscall_n = 11;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_clickos_close
-TO clickv.registers
+TO clickv.write_register
 AS
 WITH
 	(SELECT value FROM clickv.registers WHERE address = 0xA) AS fd, -- a0
@@ -1500,7 +1546,7 @@ SELECT syscall_n FROM clickv.ins_ecall_null
 WHERE syscall_n = 12;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_clickos_seek
-TO clickv.registers
+TO clickv.write_register
 AS
 WITH
 	(SELECT value FROM clickv.registers WHERE address = 0xA) AS fd, -- a0
@@ -1541,7 +1587,7 @@ FROM clickv.ins_ecall_clickos_read_null;
 
 -- set bytes in memory
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_clickos_read_output_memory
-TO clickv.memory
+TO clickv.write_memory
 AS
 WITH
 	(SELECT value FROM clickv.registers WHERE address = 0xB) AS buffer_ptr, -- a1
@@ -1555,7 +1601,7 @@ WHERE bytes_read > 0; -- only write if bytes were read
 
 -- set bytes_read in a0 register. Could also represent error if negative.
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_clickos_read_output_register
-TO clickv.registers
+TO clickv.write_register
 AS
 SELECT
 	0xA AS address, -- a0
@@ -1575,7 +1621,7 @@ SELECT syscall_n FROM clickv.ins_ecall_null
 WHERE syscall_n = 14;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_clickos_write
-TO clickv.registers
+TO clickv.write_register
 AS
 WITH
 	(SELECT value FROM clickv.registers WHERE address = 0xA) AS fd, -- a0
@@ -1601,7 +1647,7 @@ SELECT syscall_n FROM clickv.ins_ecall_null
 WHERE syscall_n = 15;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_clickos_socket
-TO clickv.registers
+TO clickv.write_register
 AS
 WITH
 	(SELECT value FROM clickv.registers WHERE address = 0xA) AS address_ptr, -- a0
