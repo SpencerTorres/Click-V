@@ -230,8 +230,14 @@ INSERT INTO clickv.pc (value) VALUES (0); -- initialize to 0
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 -- Redis In-Memory Registers
+-- CREATE TABLE IF NOT EXISTS clickv.registers (address UInt8, value UInt32)
+-- ENGINE = Redis('localhost:6379')
+-- PRIMARY KEY (address);
+-- TRUNCATE TABLE clickv.registers SYNC;
+
+-- ClickHouse Keeper In-Memory Registers
 CREATE TABLE IF NOT EXISTS clickv.registers (address UInt8, value UInt32)
-ENGINE = Redis('localhost:6379')
+ENGINE = KeeperMap('clickv_registers', 32)
 PRIMARY KEY (address);
 TRUNCATE TABLE clickv.registers SYNC;
 
@@ -252,6 +258,12 @@ CREATE VIEW IF NOT EXISTS clickv.display_registers AS SELECT address, get_regist
 -- Redis In-Memory RAM
 CREATE TABLE IF NOT EXISTS clickv.memory (address UInt32, value UInt8)
 ENGINE = Redis('localhost:6379', 1)
+PRIMARY KEY (address);
+TRUNCATE TABLE clickv.memory SYNC;
+
+-- ClickHouse Keeper In-Memory RAM
+CREATE TABLE IF NOT EXISTS clickv.memory (address UInt32, value UInt8)
+ENGINE = KeeperMap('clickv_registers', 3872)
 PRIMARY KEY (address);
 TRUNCATE TABLE clickv.memory SYNC;
 

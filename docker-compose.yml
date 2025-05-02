@@ -15,3 +15,13 @@ services:
     restart: unless-stopped
     environment:
       CLICKHOUSE_SKIP_USER_SETUP: 1
+  keeper:
+    image: clickhouse/clickhouse-keeper:head
+    container_name: clickhouse-keeper
+    network_mode: "host"
+    ports:
+      - "9181:9181"  # Keeper TCP port
+      - "9234:9234"  # Keeper internal sync port
+    volumes:
+      - ./keeper-config:/etc/clickhouse-keeper
+    restart: unless-stopped
