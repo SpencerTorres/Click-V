@@ -229,9 +229,9 @@ INSERT INTO clickv.pc (value) VALUES (0); -- initialize to 0
 -- REGISTERS
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
--- Redis In-Memory Registers
+-- EmbeddedRocksDB In-Memory Registers
 CREATE TABLE IF NOT EXISTS clickv.registers (address UInt8, value UInt32)
-ENGINE = Redis('localhost:6379')
+ENGINE = EmbeddedRocksDB
 PRIMARY KEY (address);
 TRUNCATE TABLE clickv.registers SYNC;
 
@@ -249,9 +249,9 @@ CREATE VIEW IF NOT EXISTS clickv.display_registers AS SELECT address, get_regist
 -- MEMORY (RAM) + FLASH PROGRAM
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
--- Redis In-Memory RAM
+-- EmbeddedRocksDB In-Memory RAM
 CREATE TABLE IF NOT EXISTS clickv.memory (address UInt32, value UInt8)
-ENGINE = Redis('localhost:6379', 1)
+ENGINE = EmbeddedRocksDB
 PRIMARY KEY (address);
 TRUNCATE TABLE clickv.memory SYNC;
 
