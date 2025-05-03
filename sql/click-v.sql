@@ -250,9 +250,12 @@ CREATE VIEW IF NOT EXISTS clickv.display_registers AS SELECT address, get_regist
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 -- EmbeddedRocksDB In-Memory RAM
+-- CREATE TABLE IF NOT EXISTS clickv.memory (address UInt32, value UInt8)
+-- ENGINE = EmbeddedRocksDB
+-- PRIMARY KEY (address);
 CREATE TABLE IF NOT EXISTS clickv.memory (address UInt32, value UInt8)
-ENGINE = EmbeddedRocksDB
-PRIMARY KEY (address);
+ENGINE = ReplacingMergeTree
+ORDER BY (address);
 TRUNCATE TABLE clickv.memory SYNC;
 
 CREATE VIEW IF NOT EXISTS clickv.display_memory
@@ -263,7 +266,7 @@ SELECT
 	toInt32(m.value) AS value_s_dec,
 	hex(m.value) AS value_hex,
 	char(m.value) AS value_char
-FROM clickv.memory m
+FROM clickv.memory m FINAL
 WHERE m.address >= {o:UInt32} AND m.address < {o:UInt32} + 32
 ORDER BY m.address ASC LIMIT 32;
 
@@ -289,7 +292,7 @@ FROM clickv.load_program lp;
 CREATE VIEW IF NOT EXISTS clickv.program
 AS
 WITH
-	(SELECT groupArray(toUInt32(value)) FROM (SELECT address, value FROM clickv.memory WHERE address >= 0 AND address < 2048 ORDER BY address ASC)) AS program_bytes,
+	(SELECT groupArray(toUInt32(value)) FROM (SELECT address, value FROM clickv.memory FINAL WHERE address >= 0 AND address < 2048 ORDER BY address ASC)) AS program_bytes,
 	toUInt32(length(program_bytes) / 4) AS ins_count,
 	range(0, ins_count, 4) AS ins_iter
 SELECT
@@ -358,10 +361,10 @@ TO clickv.next_instruction
 AS
 WITH
 	(SELECT value FROM clickv.pc) AS pc,
-	(SELECT toUInt32(value) FROM clickv.memory WHERE address = pc) AS ins_bytes_0,
-	(SELECT toUInt32(value) FROM clickv.memory WHERE address = pc + 0x1) AS ins_bytes_1,
-	(SELECT toUInt32(value) FROM clickv.memory WHERE address = pc + 0x2) AS ins_bytes_2,
-	(SELECT toUInt32(value) FROM clickv.memory WHERE address = pc + 0x3) AS ins_bytes_3
+	(SELECT toUInt32(value) FROM clickv.memory FINAL WHERE address = pc) AS ins_bytes_0,
+	(SELECT toUInt32(value) FROM clickv.memory FINAL WHERE address = pc + 0x1) AS ins_bytes_1,
+	(SELECT toUInt32(value) FROM clickv.memory FINAL WHERE address = pc + 0x2) AS ins_bytes_2,
+	(SELECT toUInt32(value) FROM clickv.memory FINAL WHERE address = pc + 0x3) AS ins_bytes_3
 SELECT
 	pc,
 	bitOr(bitShiftLeft(ins_bytes_3, 24), bitOr(bitShiftLeft(ins_bytes_2, 16), bitOr(bitShiftLeft(ins_bytes_1, 8), ins_bytes_0))) AS instruction,
@@ -994,7 +997,7 @@ SELECT
 	toUInt32(toInt32(toInt8(m.value))) AS value
 FROM clickv.ins_lb_null
 JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
-JOIN clickv.memory m ON m.address::UInt32 = (rs1.value + getins_i_imm(instruction))::UInt32
+JOIN clickv.memory m FINAL ON m.address::UInt32 = (rs1.value + getins_i_imm(instruction))::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -1022,8 +1025,8 @@ SELECT
 	toUInt32(toInt32(toInt16(bitOr(bitShiftLeft(toUInt16(m1.value), 8), m0.value)))) AS value
 FROM clickv.ins_lh_null
 JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
-JOIN clickv.memory m0 ON m0.address::UInt32 = offset::UInt32
-JOIN clickv.memory m1 ON m1.address::UInt32 = (offset + 0x1)::UInt32
+JOIN clickv.memory m0 FINAL ON m0.address::UInt32 = offset::UInt32
+JOIN clickv.memory m1 FINAL ON m1.address::UInt32 = (offset + 0x1)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -1051,10 +1054,10 @@ SELECT
 	bitOr(bitShiftLeft(toUInt32(m3.value), 24), bitOr(bitShiftLeft(toUInt32(m2.value), 16), bitOr(bitShiftLeft(toUInt32(m1.value), 8), toUInt32(m0.value)))) AS value
 FROM clickv.ins_lw_null
 JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
-JOIN clickv.memory m0 ON m0.address::UInt32 = offset::UInt32
-JOIN clickv.memory m1 ON m1.address::UInt32 = (offset + 0x1)::UInt32
-JOIN clickv.memory m2 ON m2.address::UInt32 = (offset + 0x2)::UInt32
-JOIN clickv.memory m3 ON m3.address::UInt32 = (offset + 0x3)::UInt32
+JOIN clickv.memory m0 FINAL ON m0.address::UInt32 = offset::UInt32
+JOIN clickv.memory m1 FINAL ON m1.address::UInt32 = (offset + 0x1)::UInt32
+JOIN clickv.memory m2 FINAL ON m2.address::UInt32 = (offset + 0x2)::UInt32
+JOIN clickv.memory m3 FINAL ON m3.address::UInt32 = (offset + 0x3)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -1080,7 +1083,7 @@ SELECT
 	toUInt32(m.value) AS value
 FROM clickv.ins_lbu_null
 JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
-JOIN clickv.memory m ON m.address::UInt32 = (rs1.value + getins_i_imm(instruction))::UInt32
+JOIN clickv.memory m FINAL ON m.address::UInt32 = (rs1.value + getins_i_imm(instruction))::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -1108,8 +1111,8 @@ SELECT
 	bitOr(bitShiftLeft(toUInt16(m1.value), 8), m0.value) AS value
 FROM clickv.ins_lhu_null
 JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
-JOIN clickv.memory m0 ON m0.address::UInt32 = offset::UInt32
-JOIN clickv.memory m1 ON m1.address::UInt32 = (offset + 0x1)::UInt32
+JOIN clickv.memory m0 FINAL ON m0.address::UInt32 = offset::UInt32
+JOIN clickv.memory m1 FINAL ON m1.address::UInt32 = (offset + 0x1)::UInt32
 WHERE address != 0;
 
 -- increment PC
@@ -1405,7 +1408,7 @@ AS
 WITH
 	(SELECT value FROM clickv.registers WHERE address = 0xA) AS text_ptr, -- a0
 	(SELECT value FROM clickv.registers WHERE address = 0xB) AS text_len, -- a1
-	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory WHERE address >= text_ptr AND address < (text_ptr + text_len) ORDER BY address ASC)) AS text_bytes
+	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory FINAL WHERE address >= text_ptr AND address < (text_ptr + text_len) ORDER BY address ASC)) AS text_bytes
 SELECT
 	arrayStringConcat(arrayMap(x -> char(x), text_bytes)) AS message
 FROM clickv.ins_ecall_null
@@ -1432,7 +1435,7 @@ AS
 WITH
 	-- add 1 to end to fix end of frame.
 	range(1, 800 + 1, 1) AS cell_iter,
-	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory WHERE address >= 0x00000C00 AND address < (0x00000C00 + 800) ORDER BY address ASC)) AS cells
+	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory FINAL WHERE address >= 0x00000C00 AND address < (0x00000C00 + 800) ORDER BY address ASC)) AS cells
 SELECT
 	concat(
 		concat(char(27), '[2J', char(27), '[1;1H'),
@@ -1459,7 +1462,7 @@ WITH
 	(SELECT value FROM clickv.registers WHERE address = 0xA) AS path_name_ptr, -- a0
 	(SELECT value FROM clickv.registers WHERE address = 0xB) AS path_name_len, -- a1
 	(SELECT value FROM clickv.registers WHERE address = 0xC) AS flags, -- a2
-	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory WHERE address >= path_name_ptr AND address < (path_name_ptr + path_name_len) ORDER BY address ASC)) AS path_name_bytes,
+	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory FINAL WHERE address >= path_name_ptr AND address < (path_name_ptr + path_name_len) ORDER BY address ASC)) AS path_name_bytes,
 	arrayConcat(path_name_bytes, [0], uint32_to_byte_array(flags)) AS request_bytes,
 	clickos_syscall(syscall_n, request_bytes) AS response_bytes
 SELECT
@@ -1584,7 +1587,7 @@ WITH
 	(SELECT value FROM clickv.registers WHERE address = 0xA) AS fd, -- a0
 	(SELECT value FROM clickv.registers WHERE address = 0xB) AS buffer_ptr, -- a1
 	(SELECT value FROM clickv.registers WHERE address = 0xC) AS count, -- a2
-	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory WHERE address >= buffer_ptr AND address < (buffer_ptr + count) ORDER BY address ASC)) AS buffer_bytes,
+	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory FINAL WHERE address >= buffer_ptr AND address < (buffer_ptr + count) ORDER BY address ASC)) AS buffer_bytes,
 	clickos_syscall(syscall_n, arrayConcat(uint32_to_byte_array(fd), buffer_bytes)) AS response_bytes
 SELECT
 	0xA AS address, -- a0
@@ -1609,7 +1612,7 @@ AS
 WITH
 	(SELECT value FROM clickv.registers WHERE address = 0xA) AS address_ptr, -- a0
 	(SELECT value FROM clickv.registers WHERE address = 0xB) AS address_len, -- a1
-	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory WHERE address >= address_ptr AND address < (address_ptr + address_len) ORDER BY address ASC)) AS address_bytes,
+	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory FINAL WHERE address >= address_ptr AND address < (address_ptr + address_len) ORDER BY address ASC)) AS address_bytes,
 	arrayConcat(address_bytes, [0]) AS request_bytes,
 	clickos_syscall(syscall_n, request_bytes) AS response_bytes
 SELECT
