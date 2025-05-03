@@ -358,10 +358,13 @@ TO clickv.next_instruction
 AS
 WITH
 	(SELECT value FROM clickv.pc) AS pc,
-	(SELECT groupArray(toUInt32(value)) FROM (SELECT address, value FROM clickv.memory WHERE address IN (pc, pc + 0x1, pc + 0x2, pc + 0x3) ORDER BY address ASC)) AS ins_bytes
+	(SELECT toUInt32(value) FROM clickv.memory WHERE address = pc) AS ins_bytes_0,
+	(SELECT toUInt32(value) FROM clickv.memory WHERE address = pc + 0x1) AS ins_bytes_1,
+	(SELECT toUInt32(value) FROM clickv.memory WHERE address = pc + 0x2) AS ins_bytes_2,
+	(SELECT toUInt32(value) FROM clickv.memory WHERE address = pc + 0x3) AS ins_bytes_3
 SELECT
 	pc,
-	bitOr(bitShiftLeft(arrayElement(ins_bytes, 4), 24), bitOr(bitShiftLeft(arrayElement(ins_bytes, 3), 16), bitOr(bitShiftLeft(arrayElement(ins_bytes, 2), 8), arrayElement(ins_bytes, 1)))) AS instruction,
+	bitOr(bitShiftLeft(ins_bytes_3, 24), bitOr(bitShiftLeft(ins_bytes_2, 16), bitOr(bitShiftLeft(ins_bytes_1, 8), ins_bytes_0))) AS instruction,
 	getins_opcode(instruction) AS opcode,
 	getins_funct3(instruction) AS funct3
 FROM clickv.clock;
@@ -1620,75 +1623,3 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_ecall_incr_pc TO clickv.pc AS 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
 -- / End of instructions
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-------------------------------------------------------------------------------------------------------------------------------------------------------------
-------------------------------------------------------------------------------------------------------------------------------------------------------------
-------------------------------------------------------------------------------------------------------------------------------------------------------------
--- Run + Control Click-V
-------------------------------------------------------------------------------------------------------------------------------------------------------------
-------------------------------------------------------------------------------------------------------------------------------------------------------------
-------------------------------------------------------------------------------------------------------------------------------------------------------------
-
----------------------------------------
--- Click-V Cheat Sheet
----------------------------------------
-
--- Step clock
--- INSERT INTO clickv.clock (_) VALUES ();
-
--- Show program
--- SELECT * FROM clickv.display_program;
-
--- Show registers
--- SELECT * FROM clickv.display_registers;
-
--- Show memory (with o parameter for offset)
--- SELECT * FROM clickv.display_memory(o=1024);
-
--- Show Console / Printed messages
--- SELECT * FROM clickv.display_console FORMAT RawBLOB;
-
--- Frame
--- SET allow_experimental_live_view = 1;
-	-- Show Frame
-		-- SELECT * FROM clickv.display_frame FORMAT RawBLOB;
-	-- Live-update frame
-		-- WATCH clickv.display_frame FORMAT RawBLOB;
-
--- Other option to show frame:
-	-- WITH
-	-- 	-- add 1 to end to fix end of frame.
-	-- 	range(1, 800 + 1, 1) AS cell_iter,
-	-- 	(SELECT groupArray(value) FROM (SELECT address, value FROM clickv.memory WHERE address >= 0x00000C00 AND address < (0x00000C00 + 800) ORDER BY address ASC)) AS cells
-	-- SELECT
-	-- 	concat(
-	-- 		concat(char(27), '[2J', char(27), '[1;1H'),
-	-- 		arrayStringConcat(arrayMap(i -> concat(char(27), '[', toString(arrayElement(cells, i)), 'm', '█', if(i % 40 = 0, '\n', '')), cell_iter))
-	-- 	 ) AS d FORMAT RawBLOB;
-
----------------------------------------
--- Reset + Load Program for Click-V
----------------------------------------
-
--- Reset PC to 0
-INSERT INTO clickv.pc (value) VALUES (0);
-
--- Clear registers, reset to 0
-TRUNCATE TABLE clickv.registers SYNC;
-INSERT INTO clickv.registers (address, value) SELECT number AS address, 0 AS value FROM numbers(1 + 31);
-
--- Clear memory, define new memory layout
--- 2Kib ROM, 1Kib RAM. 800b VRAM. Initialize to 0.
-TRUNCATE TABLE clickv.memory SYNC;
-INSERT INTO clickv.memory (address, value) SELECT number AS address, 0 AS value FROM numbers(2048 + 1024 + 800);
-
--- Clear console
-TRUNCATE TABLE clickv.print;
-
--- Reset ClickOS (Optional)
--- SELECT clickos_syscall(0, []);
-
--- Paste actual program here. Whitespace is removed automatically.
-INSERT INTO clickv.load_program (hex) VALUES ('
-
-');
