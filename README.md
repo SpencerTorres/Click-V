@@ -32,7 +32,7 @@ As it is now, the CPU runs at around `17hz`, but during early development this w
 ## How to run
 
 Steps:
-- Set up a ClickHouse v24 image
+- Set up a ClickHouse v25 image
 - Set up a Redis-like server for registers/memory access (plain redis works fine, dragonfly was slower, there's also a built-in server in `/system/mem`)
 - Run all SQL statements in `/sql/click-v.sql` (confirm your redis host is correct, right now it points to `host.docker.internal:6379`)
 - Load your own RISC-V 32i program into `INSERT INTO clickv.load_program (hex) VALUES ('FFFFFFFF')` (make sure your hex instructions are in the correct direction)
