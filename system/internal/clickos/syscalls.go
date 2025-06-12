@@ -145,6 +145,17 @@ type fileDescriptor struct {
 	pipe  *udpPipe
 }
 
+func init() {
+	file := os.Stdin
+
+	fileDescriptors[0] = &fileDescriptor{
+		id:    int32(file.Fd()),
+		seek:  0,
+		dType: FD_FILE,
+		file:  file,
+	}
+}
+
 func getNextFdID() int32 {
 	fdSequence++
 	return fdSequence

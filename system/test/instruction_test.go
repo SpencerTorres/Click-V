@@ -365,6 +365,73 @@ func TestInstruction_sub_negative(t *testing.T) {
 	assertRegisterEquals(t, ctx, db, regAddr("t2"), subUInt32(a, b))
 }
 
+func TestInstruction_mul(t *testing.T) {
+	ctx := context.Background()
+	db, err := getDB()
+	failErr(t, err)
+
+	err = resetCPU(ctx, db)
+	failErr(t, err)
+
+	// mul t2, t0, t1
+	err = loadProgram(ctx, db, true, "026283B3")
+	failErr(t, err)
+
+	setRegister(ctx, db, regAddr("t0"), 3)
+	setRegister(ctx, db, regAddr("t1"), 5)
+
+	err = clockCPU(ctx, db, "mul")
+	failErr(t, err)
+
+	assertPCIncremented(t, ctx, db, 0)
+	assertRegisterEquals(t, ctx, db, regAddr("t2"), 15)
+}
+
+func TestInstruction_div(t *testing.T) {
+	ctx := context.Background()
+	db, err := getDB()
+	failErr(t, err)
+
+	err = resetCPU(ctx, db)
+	failErr(t, err)
+
+	// div t2, t0, t1
+
+	err = loadProgram(ctx, db, true, "0262c3b3")
+	failErr(t, err)
+
+	setRegister(ctx, db, regAddr("t0"), 9)
+	setRegister(ctx, db, regAddr("t1"), 3)
+
+	err = clockCPU(ctx, db, "div")
+	failErr(t, err)
+
+	assertPCIncremented(t, ctx, db, 0)
+	assertRegisterEquals(t, ctx, db, regAddr("t2"), 3)
+}
+
+func TestInstruction_rem(t *testing.T) {
+	ctx := context.Background()
+	db, err := getDB()
+	failErr(t, err)
+
+	err = resetCPU(ctx, db)
+	failErr(t, err)
+
+	// rem t2, t0, t1
+	err = loadProgram(ctx, db, true, "0262e3b3")
+	failErr(t, err)
+
+	setRegister(ctx, db, regAddr("t0"), 8)
+	setRegister(ctx, db, regAddr("t1"), 3)
+
+	err = clockCPU(ctx, db, "rem")
+	failErr(t, err)
+
+	assertPCIncremented(t, ctx, db, 0)
+	assertRegisterEquals(t, ctx, db, regAddr("t2"), 2)
+}
+
 func TestInstruction_xor(t *testing.T) {
 	ctx := context.Background()
 	db, err := getDB()
@@ -1109,6 +1176,30 @@ func TestInstruction_jal(t *testing.T) {
 	assertPCEquals(t, ctx, db, expectedPC)
 }
 
+func TestInstruction_j(t *testing.T) {
+	ctx := context.Background()
+	db, err := getDB()
+	failErr(t, err)
+
+	err = resetCPU(ctx, db)
+	failErr(t, err)
+
+	// j 0x100
+	err = loadProgram(ctx, db, true, "1000006f")
+	failErr(t, err)
+
+	var pcBeforeClock uint32 = 0
+	err = clockCPU(ctx, db, "j")
+	failErr(t, err)
+
+	// No register should be updated
+	assertRegisterEquals(t, ctx, db, regAddr("zero"), 0)
+
+	// PC should be updated to the jump target
+	expectedPC := pcBeforeClock + 0x100
+	assertPCEquals(t, ctx, db, expectedPC)
+}
+
 func TestInstruction_jalr(t *testing.T) {
 	ctx := context.Background()
 	db, err := getDB()
@@ -1137,6 +1228,29 @@ func TestInstruction_jalr(t *testing.T) {
 
 	expectedPC := uint32(int32(rs1) + int32(imm))
 	assertPCEquals(t, ctx, db, expectedPC)
+}
+
+func TestInstruction_jr(t *testing.T) {
+	ctx := context.Background()
+	db, err := getDB()
+	failErr(t, err)
+
+	err = resetCPU(ctx, db)
+	failErr(t, err)
+
+	// jr t1
+	err = loadProgram(ctx, db, true, "00030067")
+	failErr(t, err)
+
+	var jumpAddress uint32 = 0x100
+	err = setRegister(ctx, db, regAddr("t1"), jumpAddress)
+	failErr(t, err)
+
+	err = clockCPU(ctx, db, "jr")
+	failErr(t, err)
+
+	// PC should be updated to the value in t1
+	assertPCEquals(t, ctx, db, jumpAddress)
 }
 
 func TestInstruction_beq_true(t *testing.T) {

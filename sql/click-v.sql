@@ -87,8 +87,11 @@ CREATE FUNCTION IF NOT EXISTS get_instruction_name AS (ins) -> multiIf(
 	-- R-type instructions
 	getins_opcode(ins) = 0x33 AND getins_funct3(ins) = 0x0 AND getins_r_funct7(ins) = 0x00, 'add',
 	getins_opcode(ins) = 0x33 AND getins_funct3(ins) = 0x0 AND getins_r_funct7(ins) = 0x20, 'sub',
-	getins_opcode(ins) = 0x33 AND getins_funct3(ins) = 0x4, 'xor',
-	getins_opcode(ins) = 0x33 AND getins_funct3(ins) = 0x6, 'or',
+	getins_opcode(ins) = 0x33 AND getins_funct3(ins) = 0x0 AND getins_r_funct7(ins) = 0x01, 'mul',
+	getins_opcode(ins) = 0x33 AND getins_funct3(ins) = 0x4 AND getins_r_funct7(ins) = 0x01, 'div',
+	getins_opcode(ins) = 0x33 AND getins_funct3(ins) = 0x6 AND getins_r_funct7(ins) = 0x01, 'rem',
+	getins_opcode(ins) = 0x33 AND getins_funct3(ins) = 0x4 AND getins_r_funct7(ins) = 0x00, 'xor',
+	getins_opcode(ins) = 0x33 AND getins_funct3(ins) = 0x6 AND getins_r_funct7(ins) = 0x00, 'or',
 	getins_opcode(ins) = 0x33 AND getins_funct3(ins) = 0x7, 'and',
 	getins_opcode(ins) = 0x33 AND getins_funct3(ins) = 0x1, 'sll',
 	getins_opcode(ins) = 0x33 AND getins_funct3(ins) = 0x5 AND getins_r_funct7(ins) = 0x00, 'srl',
@@ -120,8 +123,10 @@ CREATE FUNCTION IF NOT EXISTS get_instruction_name AS (ins) -> multiIf(
 	getins_opcode(ins) = 0x23 AND getins_funct3(ins) = 0x1, 'sh',
 	getins_opcode(ins) = 0x23 AND getins_funct3(ins) = 0x2, 'sw',
 	-- Jump and Link instructions
-	getins_opcode(ins) = 0x6F, 'jal',
-	getins_opcode(ins) = 0x67, 'jalr',
+	getins_opcode(ins) = 0x6F AND getins_rd(ins) != 0x0, 'jal',
+	getins_opcode(ins) = 0x6F AND getins_rd(ins) = 0x0, 'j',
+	getins_opcode(ins) = 0x67 AND getins_rd(ins) != 0x0, 'jalr',
+	getins_opcode(ins) = 0x67 AND getins_rd(ins) = 0x0 AND getins_i_imm(ins) = 0x0, 'jr',
 	-- Branch instructions
 	getins_opcode(ins) = 0x63 AND getins_funct3(ins) = 0x0, 'beq',
 	getins_opcode(ins) = 0x63 AND getins_funct3(ins) = 0x1, 'bne',
@@ -459,6 +464,83 @@ WHERE address != 0;
 -- increment PC
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_add_incr_pc TO clickv.pc AS SELECT pc + 4 AS value FROM clickv.ins_add_null;
 
+
+-- "mul" instruction
+----------------------------------------------------------------------------
+
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_mul_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
+-- instruction filter
+CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_mul_filter TO clickv.ins_mul_null
+AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
+WHERE funct3 = 0x0 AND getins_r_funct7(instruction) = 0x01;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_mul
+TO clickv.registers
+AS
+SELECT
+	getins_rd(instruction) AS address,
+	rs1.value * rs2.value AS value
+FROM clickv.ins_mul_null
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32
+WHERE address != 0;
+
+-- increment PC
+CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_mul_incr_pc TO clickv.pc AS SELECT pc + 4 AS value FROM clickv.ins_mul_null;
+
+
+-- "div" instruction
+----------------------------------------------------------------------------
+
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_div_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
+-- instruction filter
+CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_div_filter TO clickv.ins_div_null
+AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
+WHERE funct3 = 0x4 AND getins_r_funct7(instruction) = 0x01;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_div
+TO clickv.registers
+AS
+SELECT
+	getins_rd(instruction) AS address,
+	rs1.value / rs2.value AS value
+FROM clickv.ins_div_null
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32
+WHERE address != 0;
+
+-- increment PC
+CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_div_incr_pc TO clickv.pc AS SELECT pc + 4 AS value FROM clickv.ins_div_null;
+
+
+-- "rem" instruction
+----------------------------------------------------------------------------
+
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_rem_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
+-- instruction filter
+CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_rem_filter TO clickv.ins_rem_null
+AS SELECT pc, instruction FROM clickv.next_instruction_of_r_type
+WHERE funct3 = 0x6 AND getins_r_funct7(instruction) = 0x01;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_rem
+TO clickv.registers
+AS
+SELECT
+	getins_rd(instruction) AS address,
+	rs1.value % rs2.value AS value
+FROM clickv.ins_rem_null
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32
+JOIN clickv.registers rs2 ON rs2.address::UInt32 = getins_rs2(instruction)::UInt32
+WHERE address != 0;
+
+-- increment PC
+CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_rem_incr_pc TO clickv.pc AS SELECT pc + 4 AS value FROM clickv.ins_rem_null;
 
 ----------------------------------------------------------------------------
 -- "sub" instruction
@@ -1208,7 +1290,7 @@ CREATE TABLE IF NOT EXISTS clickv.ins_jal_null (pc UInt32, instruction UInt32) E
 -- instruction filter
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_jal_filter TO clickv.ins_jal_null
 AS SELECT pc, instruction FROM clickv.next_instruction_of_j_type
-WHERE opcode = 0b01101111;
+WHERE opcode = 0b01101111 AND getins_rd(instruction) != 0x0;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_jal
 TO clickv.registers
@@ -1223,6 +1305,23 @@ WHERE address != 0;
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_jal_incr_pc TO clickv.pc AS
 SELECT pc + getins_jal_imm(instruction) AS value
 FROM clickv.ins_jal_null;
+
+----------------------------------------------------------------------------
+-- "j" instruction
+----------------------------------------------------------------------------
+
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_j_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
+-- instruction filter
+CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_j_filter TO clickv.ins_j_null
+AS SELECT pc, instruction FROM clickv.next_instruction_of_j_type
+WHERE opcode = 0b01101111 AND getins_rd(instruction) = 0x0;
+
+-- increment PC
+CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_j_incr_pc TO clickv.pc AS
+SELECT pc + getins_jal_imm(instruction) AS value
+FROM clickv.ins_j_null;
 
 ----------------------------------------------------------------------------
 -- "jalr" instruction
@@ -1249,6 +1348,24 @@ WHERE address != 0;
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_jalr_incr_pc TO clickv.pc AS
 SELECT rs1.value + getins_i_imm(instruction) AS value
 FROM clickv.ins_jalr_null
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32;
+
+----------------------------------------------------------------------------
+-- "jr" instruction
+----------------------------------------------------------------------------
+
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_jr_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
+-- instruction filter
+CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_jr_filter TO clickv.ins_jr_null
+AS SELECT pc, instruction FROM clickv.next_instruction_of_j_type
+WHERE opcode = 0b01100111 AND getins_funct3(instruction) = 0x0 AND getins_rd(instruction) = 0x0 AND getins_i_imm(instruction) = 0x0;
+
+-- increment PC
+CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_jr_incr_pc TO clickv.pc AS
+SELECT rs1.value AS value
+FROM clickv.ins_jr_null
 JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32;
 
 ----------------------------------------------------------------------------
