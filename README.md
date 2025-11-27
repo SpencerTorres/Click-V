@@ -24,19 +24,18 @@ For more details, see the [architecture](#architecture) section.
 
 ### Performance
 
-I tried to use every optimization trick in the book to get this to run fast, unfortunately there is a MAJOR bottleneck to the performance of this emulator due to a bug in ClickHouse KVStorage logic. Because ClickHouse doesn't have an internal KV-type storage engine, I use Redis for registers/memory. But there is a bug with `allow_experimental_analyzer=1` where instead of doing a single `MGET`, it will `SCAN` all keys and *then* `MGET` multiple times.
-I haven't submitted a bug report yet, but I did investigate it. More notes are commented in the file `/sql/click-v.sql:11`.
+Using the `EmbeddedRocksDB` table engine for registers/memory, the performance degrades as the memory grows because some parts of the emulator must scan through memory multiple times.
 
-As it is now, the CPU runs at around `17hz`, but during early development this was significantly higher. It *can* perform better, but when every almost every instruction depends on a register read, it kills performance quickly. It gets worse with more memory allocated in the emulator.
+For smaller binaries, it can run close to `60hz`, but for complex binaries (such as Doom) it is closer to `12hz`.
 
 ## How to run
 
 Steps:
-- Set up a ClickHouse v25 image
-- Set up a Redis-like server for registers/memory access (plain redis works fine, dragonfly was slower, there's also a built-in server in `/system/mem`)
-- Run all SQL statements in `/sql/click-v.sql` (confirm your redis host is correct, right now it points to `host.docker.internal:6379`)
-- Load your own RISC-V 32i program into `INSERT INTO clickv.load_program (hex) VALUES ('FFFFFFFF')` (make sure your hex instructions are in the correct direction)
-- Either clock the system via `INSERT INTO clickv.clock (_) VALUES ()`, or use the auto-clock in `/system/clock`
+- Set up a ClickHouse v25.10+ image
+- Run all SQL statements in `/sql/click-v.sql` (exclude the syscalls at the bottom if you don't have the ClickOS UDF setup. See `docker-compose.yml` for clues.)
+- Load your own RISC-V 32im program into `INSERT INTO clickv.load_program (hex) VALUES ('FFFFFFFF')` (make sure your hex instructions are in the correct direction). For larger binaries use `./system/loadprogram`.
+- Either clock the system via `INSERT INTO clickv.clock (_) VALUES ()`, or use the auto-clock in `/system/clock`.
+- To reset the CPU, run the commands in `/sql/reset.sql`. You can pre-allocate memory here too.
 
 You can now monitor the program with the following commands:
 - Show program instructions + current instruction: `SELECT * FROM clickv.display_program;`
@@ -54,7 +53,7 @@ ROM/RAM/Graphics Memory is configurable.
 
 ### ClickHouse
 
-Depends on ClickHouse v24.
+Depends on ClickHouse v25.10+.
 No other setup is required for basic emulator.
 For handling syscalls, you will need to set up the ClickOS UDF, but this is optional.
 
@@ -92,16 +91,6 @@ To get the program hex, I made a script called `gethex.sh`.
 You can copy/paste this directly into the program input for the emulator.
 
 This program contains a linker script that defines the memory ranges for ROM, RAM, Stack size, and VRAM.
-
-### Mem (Redis-replacement)
-
-*path: `/system/cmd/mem`*
-
-This program will store the registers/memory for the emulator.
-Dragonfly was slow for this use case, Redis was faster, but this program is optimized to use exact amounts of memory + sequential reads.
-
-Note: there is a bug with ClickHouse where **ALL** queries use `SCAN`, even direct `k=1` queries.
-This is a huge hit to performance, and will require a patch to ClickHouse to fix.
 
 
 ### RISC-V Instruction Test suite
@@ -154,8 +143,8 @@ It would also require adding a `timestamp` field of some kind to each row, since
 
 It can be done, but it would require having a lot of duplicated rows, with enough space so that old memory would have a low probability of falling out of the table. Too much memory usage.
 
-So I then switched to a `Redis` table engine. This is the optimal structure, since it operates as a fast in-memory KV store with no duplicates.
-This works perfectly, except for how the newer version of ClickHouse ALWAYS runs a full `SCAN` with multiple `MGET` calls.
+So I then switched to a `EmbeddedRocksDB` table engine. This is the optimal structure, since it operates as a fast in-memory KV store with no duplicates.
+This works perfectly, but gets slower as the allocated memory gets larger. The ClickHouse query analyzer might be able to optimize this better in the future.
 
 Memory can be read via a `JOIN` or sub-query, even in multiple bytes.
 Memory can be written in multiple bytes using `arrayJoin` into the `memory` table.

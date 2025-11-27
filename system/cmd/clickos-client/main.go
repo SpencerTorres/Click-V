@@ -106,7 +106,7 @@ func startOSClient(serverAddr string, msgIn <-chan string, msgOut chan<- string,
 				continue
 			}
 
-			buffer := make([]byte, 8192)
+			buffer := make([]byte, 64*1024)
 			err = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 			if err != nil {
 				log.Println("failed to set read deadline:", err)

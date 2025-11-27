@@ -374,7 +374,7 @@ func TestInstruction_mul(t *testing.T) {
 	failErr(t, err)
 
 	// mul t2, t0, t1
-	err = loadProgram(ctx, db, true, "026283B3")
+	err = loadProgram(ctx, db, true, "026283b3")
 	failErr(t, err)
 
 	setRegister(ctx, db, regAddr("t0"), 3)
@@ -387,6 +387,160 @@ func TestInstruction_mul(t *testing.T) {
 	assertRegisterEquals(t, ctx, db, regAddr("t2"), 15)
 }
 
+func TestInstruction_mul_negative(t *testing.T) {
+	ctx := context.Background()
+	db, err := getDB()
+	failErr(t, err)
+
+	err = resetCPU(ctx, db)
+	failErr(t, err)
+
+	// mul t2, t0, t1
+	err = loadProgram(ctx, db, true, "026283b3")
+	failErr(t, err)
+
+	setRegister(ctx, db, regAddr("t0"), 3)
+	setRegister(ctx, db, regAddr("t1"), 0xFFFFFFFB) // -5
+
+	err = clockCPU(ctx, db, "mul")
+	failErr(t, err)
+
+	assertPCIncremented(t, ctx, db, 0)
+	assertRegisterEquals(t, ctx, db, regAddr("t2"), 0xFFFFFFF1) // -15
+}
+
+func TestInstruction_mulh(t *testing.T) {
+	ctx := context.Background()
+	db, err := getDB()
+	failErr(t, err)
+
+	err = resetCPU(ctx, db)
+	failErr(t, err)
+
+	// mulh t2, t0, t1
+	err = loadProgram(ctx, db, true, "026293b3")
+	failErr(t, err)
+
+	setRegister(ctx, db, regAddr("t0"), 0x80000000) // -2147483648
+	setRegister(ctx, db, regAddr("t1"), 2)
+
+	err = clockCPU(ctx, db, "mulh")
+	failErr(t, err)
+
+	assertPCIncremented(t, ctx, db, 0)
+	assertRegisterEquals(t, ctx, db, regAddr("t2"), 0xFFFFFFFF) // -1
+}
+
+func TestInstruction_mulh_positive(t *testing.T) {
+	ctx := context.Background()
+	db, err := getDB()
+	failErr(t, err)
+
+	err = resetCPU(ctx, db)
+	failErr(t, err)
+
+	// mulh t2, t0, t1
+	err = loadProgram(ctx, db, true, "026293b3")
+	failErr(t, err)
+
+	setRegister(ctx, db, regAddr("t0"), 0x40000000) // 1073741824
+	setRegister(ctx, db, regAddr("t1"), 4)
+
+	err = clockCPU(ctx, db, "mulh")
+	failErr(t, err)
+
+	assertPCIncremented(t, ctx, db, 0)
+	assertRegisterEquals(t, ctx, db, regAddr("t2"), 1)
+}
+
+func TestInstruction_mulhsu(t *testing.T) {
+	ctx := context.Background()
+	db, err := getDB()
+	failErr(t, err)
+
+	err = resetCPU(ctx, db)
+	failErr(t, err)
+
+	// mulhsu t2, t0, t1
+	err = loadProgram(ctx, db, true, "0262a3b3")
+	failErr(t, err)
+
+	setRegister(ctx, db, regAddr("t0"), 0xFFFFFFFE) // -2
+	setRegister(ctx, db, regAddr("t1"), 0x80000000) // 2147483648
+
+	err = clockCPU(ctx, db, "mulhsu")
+	failErr(t, err)
+
+	assertPCIncremented(t, ctx, db, 0)
+	assertRegisterEquals(t, ctx, db, regAddr("t2"), 0xFFFFFFFF) // -1
+}
+
+func TestInstruction_mulhsu_positive(t *testing.T) {
+	ctx := context.Background()
+	db, err := getDB()
+	failErr(t, err)
+
+	err = resetCPU(ctx, db)
+	failErr(t, err)
+
+	// mulhsu t2, t0, t1
+	err = loadProgram(ctx, db, true, "0262a3b3")
+	failErr(t, err)
+
+	setRegister(ctx, db, regAddr("t0"), 2)
+	setRegister(ctx, db, regAddr("t1"), 0x80000000) // 2147483648
+
+	err = clockCPU(ctx, db, "mulhsu")
+	failErr(t, err)
+
+	assertPCIncremented(t, ctx, db, 0)
+	assertRegisterEquals(t, ctx, db, regAddr("t2"), 1)
+}
+
+func TestInstruction_mulhu(t *testing.T) {
+	ctx := context.Background()
+	db, err := getDB()
+	failErr(t, err)
+
+	err = resetCPU(ctx, db)
+	failErr(t, err)
+
+	// mulhu t2, t0, t1
+	err = loadProgram(ctx, db, true, "0262b3b3")
+	failErr(t, err)
+
+	setRegister(ctx, db, regAddr("t0"), 0xFFFFFFFF) // 4294967295
+	setRegister(ctx, db, regAddr("t1"), 0xFFFFFFFF) // 4294967295
+
+	err = clockCPU(ctx, db, "mulhu")
+	failErr(t, err)
+
+	assertPCIncremented(t, ctx, db, 0)
+	assertRegisterEquals(t, ctx, db, regAddr("t2"), 0xFFFFFFFE) // 4294967294
+}
+
+func TestInstruction_mulhu_half(t *testing.T) {
+	ctx := context.Background()
+	db, err := getDB()
+	failErr(t, err)
+
+	err = resetCPU(ctx, db)
+	failErr(t, err)
+
+	// mulhu t2, t0, t1
+	err = loadProgram(ctx, db, true, "0262b3b3")
+	failErr(t, err)
+
+	setRegister(ctx, db, regAddr("t0"), 0x80000000) // 2147483648
+	setRegister(ctx, db, regAddr("t1"), 2)
+
+	err = clockCPU(ctx, db, "mulhu")
+	failErr(t, err)
+
+	assertPCIncremented(t, ctx, db, 0)
+	assertRegisterEquals(t, ctx, db, regAddr("t2"), 1)
+}
+
 func TestInstruction_div(t *testing.T) {
 	ctx := context.Background()
 	db, err := getDB()
@@ -396,7 +550,6 @@ func TestInstruction_div(t *testing.T) {
 	failErr(t, err)
 
 	// div t2, t0, t1
-
 	err = loadProgram(ctx, db, true, "0262c3b3")
 	failErr(t, err)
 
@@ -408,6 +561,94 @@ func TestInstruction_div(t *testing.T) {
 
 	assertPCIncremented(t, ctx, db, 0)
 	assertRegisterEquals(t, ctx, db, regAddr("t2"), 3)
+}
+
+func TestInstruction_div_negative(t *testing.T) {
+	ctx := context.Background()
+	db, err := getDB()
+	failErr(t, err)
+
+	err = resetCPU(ctx, db)
+	failErr(t, err)
+
+	// div t2, t0, t1
+	err = loadProgram(ctx, db, true, "0262c3b3")
+	failErr(t, err)
+
+	setRegister(ctx, db, regAddr("t0"), 0xFFFFFFE7) // -25
+	setRegister(ctx, db, regAddr("t1"), 5)
+
+	err = clockCPU(ctx, db, "div")
+	failErr(t, err)
+
+	assertPCIncremented(t, ctx, db, 0)
+	assertRegisterEquals(t, ctx, db, regAddr("t2"), 0xFFFFFFFB) // -5
+}
+
+func TestInstruction_div_zero(t *testing.T) {
+	ctx := context.Background()
+	db, err := getDB()
+	failErr(t, err)
+
+	err = resetCPU(ctx, db)
+	failErr(t, err)
+
+	// div t2, t0, t1
+	err = loadProgram(ctx, db, true, "0262c3b3")
+	failErr(t, err)
+
+	setRegister(ctx, db, regAddr("t0"), 9)
+	setRegister(ctx, db, regAddr("t1"), 0)
+
+	err = clockCPU(ctx, db, "div_zero")
+	failErr(t, err)
+
+	assertPCIncremented(t, ctx, db, 0)
+	assertRegisterEquals(t, ctx, db, regAddr("t2"), 0xFFFFFFFF)
+}
+
+func TestInstruction_divu(t *testing.T) {
+	ctx := context.Background()
+	db, err := getDB()
+	failErr(t, err)
+
+	err = resetCPU(ctx, db)
+	failErr(t, err)
+
+	// divu t2, t0, t1
+	err = loadProgram(ctx, db, true, "0262d3b3")
+	failErr(t, err)
+
+	setRegister(ctx, db, regAddr("t0"), 9)
+	setRegister(ctx, db, regAddr("t1"), 3)
+
+	err = clockCPU(ctx, db, "divu")
+	failErr(t, err)
+
+	assertPCIncremented(t, ctx, db, 0)
+	assertRegisterEquals(t, ctx, db, regAddr("t2"), 3)
+}
+
+func TestInstruction_divu_zero(t *testing.T) {
+	ctx := context.Background()
+	db, err := getDB()
+	failErr(t, err)
+
+	err = resetCPU(ctx, db)
+	failErr(t, err)
+
+	// divu t2, t0, t1
+	err = loadProgram(ctx, db, true, "0262d3b3")
+	failErr(t, err)
+
+	setRegister(ctx, db, regAddr("t0"), 5)
+	setRegister(ctx, db, regAddr("t1"), 0)
+
+	err = clockCPU(ctx, db, "divu_zero")
+	failErr(t, err)
+
+	assertPCIncremented(t, ctx, db, 0)
+	assertRegisterEquals(t, ctx, db, regAddr("t2"), 0xFFFFFFFF)
 }
 
 func TestInstruction_rem(t *testing.T) {
@@ -430,6 +671,72 @@ func TestInstruction_rem(t *testing.T) {
 
 	assertPCIncremented(t, ctx, db, 0)
 	assertRegisterEquals(t, ctx, db, regAddr("t2"), 2)
+}
+
+func TestInstruction_rem_zero(t *testing.T) {
+	ctx := context.Background()
+	db, err := getDB()
+	failErr(t, err)
+
+	err = resetCPU(ctx, db)
+	failErr(t, err)
+
+	// rem t2, t0, t1
+	err = loadProgram(ctx, db, true, "0262e3b3")
+	failErr(t, err)
+
+	setRegister(ctx, db, regAddr("t0"), 8)
+	setRegister(ctx, db, regAddr("t1"), 0)
+
+	err = clockCPU(ctx, db, "rem_zero")
+	failErr(t, err)
+
+	assertPCIncremented(t, ctx, db, 0)
+	assertRegisterEquals(t, ctx, db, regAddr("t2"), 8)
+}
+
+func TestInstruction_remu(t *testing.T) {
+	ctx := context.Background()
+	db, err := getDB()
+	failErr(t, err)
+
+	err = resetCPU(ctx, db)
+	failErr(t, err)
+
+	// remu t2, t0, t1
+	err = loadProgram(ctx, db, true, "0262f3b3")
+	failErr(t, err)
+
+	setRegister(ctx, db, regAddr("t0"), 8)
+	setRegister(ctx, db, regAddr("t1"), 3)
+
+	err = clockCPU(ctx, db, "remu")
+	failErr(t, err)
+
+	assertPCIncremented(t, ctx, db, 0)
+	assertRegisterEquals(t, ctx, db, regAddr("t2"), 2)
+}
+
+func TestInstruction_remu_zero(t *testing.T) {
+	ctx := context.Background()
+	db, err := getDB()
+	failErr(t, err)
+
+	err = resetCPU(ctx, db)
+	failErr(t, err)
+
+	// remu t2, t0, t1
+	err = loadProgram(ctx, db, true, "0262f3b3")
+	failErr(t, err)
+
+	setRegister(ctx, db, regAddr("t0"), 8)
+	setRegister(ctx, db, regAddr("t1"), 0)
+
+	err = clockCPU(ctx, db, "remu_zero")
+	failErr(t, err)
+
+	assertPCIncremented(t, ctx, db, 0)
+	assertRegisterEquals(t, ctx, db, regAddr("t2"), 8)
 }
 
 func TestInstruction_xor(t *testing.T) {

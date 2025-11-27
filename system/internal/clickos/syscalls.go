@@ -58,7 +58,7 @@ type SyscallResponse struct {
 }
 
 func (r *SyscallResponse) DebugString() string {
-	return fmt.Sprintf("syscall: %s (%d), status: %d, bytes: %v", SyscallToName(r.SyscallN), r.SyscallN, r.Status, r.Bytes)
+	return fmt.Sprintf("syscall: %s (%d), status: %d, bytes(%d): %v", SyscallToName(r.SyscallN), r.SyscallN, r.Status, len(r.Bytes), r.Bytes)
 }
 
 func (r *SyscallResponse) Serialize() []byte {
@@ -134,7 +134,7 @@ type descriptorType uint8
 const FD_FILE descriptorType = 0
 const FD_PIPE descriptorType = 1
 
-var fdSequence int32 = 0
+var fdSequence int32 = 2 // start after stdin/stdout/stderr
 
 type fileDescriptor struct {
 	id    int32
@@ -179,6 +179,18 @@ type openCall struct {
 	flags    int32
 }
 
+// When bootstrapping the emulator with existing pc/registers/memory, we must also replicate any open files
+func BootstrapOpenFile(pathName string, seekOffset int64) error {
+	resp, err := handleOpenCall(openCall{pathName: pathName})
+	currentSeek, seekErr := fileDescriptors[resp.Status].file.Seek(seekOffset, 0)
+	if seekErr != nil {
+		return seekErr
+	}
+
+	log.Printf("bootstrapping file open: %s fd: %d requested seek: %d current seek: %d\n", pathName, resp.Status, seekOffset, currentSeek)
+	return err
+}
+
 func decodeOpenCall(bytes []byte) (openCall, error) {
 	offset := 0
 	pathName := ReadCString(bytes)
@@ -190,6 +202,7 @@ func decodeOpenCall(bytes []byte) (openCall, error) {
 	flags := int32(binary.LittleEndian.Uint32(bytes[offset : offset+4]))
 	offset += 4
 
+	log.Printf("OPEN: pathName: '%s' flags: %d\n", pathName, flags)
 	return openCall{pathName, flags}, nil
 }
 
@@ -203,7 +216,11 @@ func handleOpenCall(call openCall) (*SyscallResponse, error) {
 
 	file, err := os.OpenFile(call.pathName, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file: %w", err)
+		log.Println(fmt.Errorf("failed to open file: %w", err))
+		return &SyscallResponse{
+			SyscallN: SYSCALL_OPEN,
+			Status:   -1,
+		}, nil
 	}
 
 	fd.file = file
@@ -228,6 +245,7 @@ func decodeCloseCall(bytes []byte) (closeCall, error) {
 	fd := int32(binary.LittleEndian.Uint32(bytes[offset : offset+4]))
 	offset += 4
 
+	log.Printf("CLOSE: fd: %d\n", fd)
 	return closeCall{fd}, nil
 }
 
@@ -240,12 +258,20 @@ func handleCloseCall(call closeCall) (*SyscallResponse, error) {
 	if fd.dType == FD_FILE {
 		err := fd.file.Close()
 		if err != nil {
-			return nil, fmt.Errorf("failed to close file: %w", err)
+			log.Println(fmt.Errorf("failed to close file: %w", err))
+			return &SyscallResponse{
+				SyscallN: SYSCALL_CLOSE,
+				Status:   -1,
+			}, nil
 		}
 	} else if fd.dType == FD_PIPE {
 		err := fd.pipe.Close()
 		if err != nil {
-			return nil, fmt.Errorf("failed to close UDP pipe: %w", err)
+			log.Println(fmt.Errorf("failed to close UDP pipe: %w", err))
+			return &SyscallResponse{
+				SyscallN: SYSCALL_CLOSE,
+				Status:   -1,
+			}, nil
 		}
 	}
 
@@ -275,6 +301,7 @@ func decodeSeekCall(bytes []byte) (seekCall, error) {
 	whence := int32(binary.LittleEndian.Uint32(bytes[offset : offset+4])) // whence...
 	offset += 4
 
+	log.Printf("SEEK: fd: %d offset: %d whence: %d\n", fd, seekOffset, whence)
 	return seekCall{
 		fd:     fd,
 		offset: seekOffset,
@@ -292,7 +319,12 @@ func handleSeekCall(call seekCall) (*SyscallResponse, error) {
 
 	current, err := fd.file.Seek(int64(call.offset), int(call.whence))
 	if err != nil {
-		return nil, fmt.Errorf("failed to seek file: %w", err)
+		log.Println(fmt.Errorf("failed to seek file: %w", err))
+		return &SyscallResponse{
+			SyscallN: SYSCALL_SEEK,
+			Status:   -1,
+		}, nil
+
 	}
 
 	fd.seek = int32(current)
@@ -318,6 +350,7 @@ func decodeReadCall(bytes []byte) (readCall, error) {
 	count := binary.LittleEndian.Uint32(bytes[offset : offset+4])
 	offset += 4
 
+	log.Printf("READ: fd: %d count: %d\n", fd, count)
 	return readCall{fd, count}, nil
 }
 
@@ -333,14 +366,22 @@ func handleReadCall(call readCall) (*SyscallResponse, error) {
 	if fd.dType == FD_FILE {
 		n, err = fd.file.Read(buf)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read file: %w", err)
+			log.Println(fmt.Errorf("failed to read file: %w", err))
+			return &SyscallResponse{
+				SyscallN: SYSCALL_READ,
+				Status:   -1,
+			}, nil
 		}
 
 		fd.seek += int32(n)
 	} else if fd.dType == FD_PIPE {
 		n, err = fd.pipe.Read(buf)
 		if err != nil {
-			return nil, fmt.Errorf("failed to write UDP: %w", err)
+			log.Println(fmt.Errorf("failed to read UDP: %w", err))
+			return &SyscallResponse{
+				SyscallN: SYSCALL_READ,
+				Status:   -1,
+			}, nil
 		}
 	}
 
@@ -366,6 +407,7 @@ func decodeWriteCall(bytes []byte) (writeCall, error) {
 	offset += 4
 	writeBytes := bytes[offset:]
 
+	log.Printf("WRITE: fd: %d bytes count: %d\n", fd, len(writeBytes))
 	return writeCall{
 		fd:    fd,
 		bytes: writeBytes,
@@ -437,7 +479,7 @@ func (p *udpPipe) backgroundRead() {
 		case <-p.done:
 			return
 		default:
-			packet := make([]byte, 8192)
+			packet := make([]byte, 64*1024)
 			n, _, err := p.conn.ReadFromUDP(packet)
 			if err != nil {
 				log.Printf("failed to read UDP: %v\n", err)

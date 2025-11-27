@@ -12,7 +12,7 @@ INSERT INTO clickv.registers (address, value) SELECT number AS address, 0 AS val
 -- Clear memory, define new memory layout
 -- 2Kib ROM, 1Kib RAM. 800b VRAM. Initialize to 0.
 TRUNCATE TABLE clickv.memory SYNC;
-INSERT INTO clickv.memory (address, value) SELECT number AS address, 0 AS value FROM numbers(2048 + 1024 + 800);
+-- INSERT INTO clickv.memory (address, value) SELECT number AS address, 0 AS value FROM numbers((1536*1024));
 
 -- Clear console
 TRUNCATE TABLE clickv.print;

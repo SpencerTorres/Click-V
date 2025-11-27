@@ -23,7 +23,13 @@ func main() {
 	defer conn.Close()
 	log.Println("ClickOS listening on", hostAddress)
 
-	buffer := make([]byte, 8192)
+	// bootstrap fd for doom
+	// err = clickos.BootstrapOpenFile("doom1.wad", 3991051)
+	// if err != nil {
+	// 	log.Fatalf("failed to bootstrap file: %v", err)
+	// }
+
+	buffer := make([]byte, 64*1024)
 	for {
 		n, clientAddr, err := conn.ReadFromUDP(buffer)
 		if err != nil {
@@ -59,6 +65,7 @@ func handlePacket(clientAddr string, payload []byte) ([]byte, error) {
 		return nil, fmt.Errorf("syscall %s (%d) failed: %w", clickos.SyscallToName(req.SyscallN), req.SyscallN, err)
 	}
 
-	log.Printf("response: %s\n", resp.DebugString())
-	return resp.Serialize(), nil
+	respBytes := resp.Serialize()
+	log.Printf("response(%d): %s\n", len(respBytes), resp.DebugString())
+	return respBytes, nil
 }

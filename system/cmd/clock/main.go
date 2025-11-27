@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"clickhouse.com/clickv/internal/db"
@@ -15,24 +16,24 @@ func main() {
 		return
 	}
 
-	var now time.Time
-	var lastTime time.Time
-	var cycles int64 = 0
-	var totalCycles int64 = 0
+	var cycles atomic.Int64
+	var totalCycles atomic.Int64
+
+	go func() {
+		for {
+			<-time.After(1 * time.Second)
+			fmt.Printf("clock speed: %dhz total cycles: %d\n", cycles.Load(), totalCycles.Load())
+			cycles.Store(0)
+		}
+	}()
+
 	for {
-		err := conn.Exec(context.Background(), "INSERT INTO clickv.clock (_) VALUEs ()")
+		err := conn.Exec(context.Background(), "INSERT INTO clickv.clock (_) VALUES ()")
 		if err != nil {
 			fmt.Println(err)
 		}
-		// time.Sleep(500 * time.Millisecond)
-		cycles++
-		totalCycles++
 
-		now = time.Now()
-		if now.Sub(lastTime) > time.Duration(1*time.Second) {
-			fmt.Printf("clock speed: %dhz total cycles: %d\n", cycles, totalCycles)
-			cycles = 0
-			lastTime = now
-		}
+		cycles.Add(1)
+		totalCycles.Add(1)
 	}
 }
