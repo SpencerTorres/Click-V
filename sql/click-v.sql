@@ -1437,6 +1437,23 @@ SELECT pc + getins_jal_imm(instruction) AS value
 FROM clickv.ins_jal_null;
 
 ----------------------------------------------------------------------------
+-- "j" instruction, TODO: required, but not a real instruction
+----------------------------------------------------------------------------
+
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_j_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
+-- instruction filter
+CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_j_filter TO clickv.ins_j_null
+AS SELECT pc, instruction FROM clickv.next_instruction_of_j_type
+WHERE opcode = 0b01101111 AND getins_rd(instruction) = 0x0;
+
+-- increment PC
+CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_j_incr_pc TO clickv.pc AS
+SELECT pc + getins_jal_imm(instruction) AS value
+FROM clickv.ins_j_null;
+
+----------------------------------------------------------------------------
 -- "jalr" instruction
 ----------------------------------------------------------------------------
 
@@ -1461,6 +1478,24 @@ WHERE address != 0;
 CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_jalr_incr_pc TO clickv.pc AS
 SELECT rs1.value + getins_i_imm(instruction) AS value
 FROM clickv.ins_jalr_null
+JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32;
+
+----------------------------------------------------------------------------
+-- "jr" instruction, TODO: required, but not a real instruction
+----------------------------------------------------------------------------
+
+-- trigger instruction execution
+CREATE TABLE IF NOT EXISTS clickv.ins_jr_null (pc UInt32, instruction UInt32) ENGINE = Null;
+
+-- instruction filter
+CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_jr_filter TO clickv.ins_jr_null
+AS SELECT pc, instruction FROM clickv.next_instruction_of_j_type
+WHERE opcode = 0b01100111 AND getins_funct3(instruction) = 0x0 AND getins_rd(instruction) = 0x0 AND getins_i_imm(instruction) = 0x0;
+
+-- increment PC
+CREATE MATERIALIZED VIEW IF NOT EXISTS clickv.ins_jr_incr_pc TO clickv.pc AS
+SELECT rs1.value AS value
+FROM clickv.ins_jr_null
 JOIN clickv.registers rs1 ON rs1.address::UInt32 = getins_rs1(instruction)::UInt32;
 
 ----------------------------------------------------------------------------
